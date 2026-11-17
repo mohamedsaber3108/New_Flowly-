@@ -68,7 +68,7 @@ DOMAIN="${DOMAIN:-$(grep -E '^FRONTEND_URL=' "$BACKEND_DIR/.env" | head -n1 | se
 echo "==> health check"
 for i in $(seq 1 20); do
   if curl -fsS -H "X-Forwarded-Proto: https" http://127.0.0.1:8000/health/ >/dev/null 2>&1; then
-    echo "Deploy OK. Previous: ${PREVIOUS:0:7} (rollback needs a git checkout: bash deploy/rollback.sh)"
+    echo "Deploy OK ($(as_app git -C "$APP_DIR" rev-parse --short HEAD 2>/dev/null || echo files)). Roll back to ${PREVIOUS:0:7} with: sudo bash ${APP_DIR}/deploy/rollback.sh"
     exit 0
   fi
   sleep 2
