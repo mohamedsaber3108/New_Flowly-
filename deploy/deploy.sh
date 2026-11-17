@@ -23,12 +23,18 @@ manage() { as_app bash -c "cd '$BACKEND_DIR' && DJANGO_SETTINGS_MODULE=config.se
 mkdir -p "$APP_DIR/.deploy"
 chown "$APP_USER":"$APP_USER" "$APP_DIR/.deploy"
 if [ -d "$APP_DIR/.git" ]; then
-  PREVIOUS="$(as_app git -C "$APP_DIR" rev-parse HEAD)"
-  echo "$PREVIOUS" > "$APP_DIR/.deploy/previous"
+  BEFORE="$(as_app git -C "$APP_DIR" rev-parse HEAD)"
   echo "==> git pull origin ${BRANCH}"
   as_app git -C "$APP_DIR" fetch origin "$BRANCH"
   as_app git -C "$APP_DIR" checkout "$BRANCH"   # leaves a detached HEAD left by rollback.sh
   as_app git -C "$APP_DIR" pull --ff-only origin "$BRANCH"
+  AFTER="$(as_app git -C "$APP_DIR" rev-parse HEAD)"
+  # Move the rollback target only when this deploy brings a new commit; re-running a deploy of the
+  # same commit must keep pointing at the release before it.
+  if [ "$BEFORE" != "$AFTER" ] || [ ! -s "$APP_DIR/.deploy/previous" ]; then
+    echo "$BEFORE" > "$APP_DIR/.deploy/previous"
+  fi
+  PREVIOUS="$(cat "$APP_DIR/.deploy/previous")"
   echo "Deploying $(as_app git -C "$APP_DIR" log --oneline -1)"
 else
   PREVIOUS="uploaded-tree"
