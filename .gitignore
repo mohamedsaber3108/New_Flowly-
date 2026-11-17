@@ -38,3 +38,6 @@ frontend/.sites-runtime/
 *.txt.log
 /dbg*.txt
 /*.log
+
+# Server-side deploy state (previous commit for rollback.sh)
+.deploy/
