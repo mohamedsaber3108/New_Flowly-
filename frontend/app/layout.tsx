@@ -1,0 +1,4 @@
+import type {Metadata} from 'next';
+import './globals.css';
+export const metadata:Metadata={metadataBase:new URL('https://flowly-reimagined.abdelrahman2611.chatgpt.site'),title:'Flowly — Intelligence in motion',description:'AI, software and automation built around your business. Intelligent ERP, private AI, connected operations and digital government.',icons:{icon:'/favicon.svg'},openGraph:{title:'Flowly — Intelligence in motion',description:'Less friction. More possibility. AI, software and automation built around your business.',type:'website',images:[{url:'/og-flowly.png',width:1200,height:630,alt:'Flowly — Less friction. More possibility.'}]},twitter:{card:'summary_large_image',images:['/og-flowly.png']}};
+export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>;}

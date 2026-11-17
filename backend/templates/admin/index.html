@@ -1,0 +1,25 @@
+{% extends "unfold/layouts/base.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}{% endblock %}
+
+{% block content %}
+  <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
+      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Total requests</div>
+      <div class="text-2xl font-semibold">{{ flowly_total_requests }}</div>
+    </div>
+    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
+      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Pending review</div>
+      <div class="text-2xl font-semibold">{{ flowly_pending }}</div>
+    </div>
+    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
+      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">In progress</div>
+      <div class="text-2xl font-semibold">{{ flowly_in_progress }}</div>
+    </div>
+    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
+      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Active consultation slots</div>
+      <div class="text-2xl font-semibold">{{ flowly_upcoming }}</div>
+    </div>
+  </div>
+{% endblock %}

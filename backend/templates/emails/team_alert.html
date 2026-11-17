@@ -1,0 +1,8 @@
+{% extends "emails/base.html" %}
+{% block content %}
+<p><strong>New request {{ req.reference }}</strong></p>
+<p>{{ req.name }} ({{ req.email }}) · {{ req.organization }}<br>{{ req.get_kind_display }} · {{ req.get_audience_display }}</p>
+{% if appointment %}<p>Provisional slot: {{ appointment.date|date:"Y-m-d" }} {{ appointment.time }} (Cairo)</p>{% endif %}
+<p style="white-space:pre-wrap">{{ req.details.requirements }}</p>
+<p><a href="{{ site_url }}/admin/" style="color:#7e22ce">Open the admin</a></p>
+{% endblock %}

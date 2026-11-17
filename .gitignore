@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.env
+backend/db.sqlite3
+backend/*.sqlite3
+backend/staticfiles/
+backend/media/
+backend/media_test/
+backend/logs/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend tooling
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend/.vinext/
+frontend/.wrangler/
+
+# Local archives and scratch
+*.zip
+.env
+*.log
+.DS_Store
+
+# Browser test harness dependencies and output
+e2e/node_modules/
+e2e-result.txt
+_public_backup/
+frontend/.sites-runtime/
+# Private keys must never be committed
+*.pem
+*.key
+*.txt.log
+/dbg*.txt
+/*.log

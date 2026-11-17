@@ -1,0 +1,13 @@
+{% extends "emails/base.html" %}
+{% block content %}
+{% if arabic %}
+<div dir="rtl" style="text-align:right">
+<p>مرحبًا {{ req.name }}،</p>
+<p>تم تحديث حالة طلبك <strong>{{ req.reference }}</strong>. يمكنك مراجعة آخر حالة من <a href="{{ frontend_url }}/status" style="color:#7e22ce">صفحة المتابعة</a>.</p>
+</div>
+{% else %}
+<p>Hi {{ req.name }},</p>
+<p>Your request <strong>{{ req.reference }}</strong> is now: <strong>{{ status_label }}</strong>.</p>
+<p>See the latest on the <a href="{{ frontend_url }}/status" style="color:#7e22ce">status page</a>.</p>
+{% endif %}
+{% endblock %}

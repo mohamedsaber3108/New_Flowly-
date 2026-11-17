@@ -1,0 +1,18 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>My Flowly account</title>
+  <link rel="stylesheet" href="{% static 'account/portal.css' %}">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="/">Flowly</a>
+    <nav id="nav" aria-label="Account"></nav>
+  </header>
+  <main id="app" tabindex="-1" aria-live="polite"></main>
+  <script src="{% static 'account/portal.js' %}" defer></script>
+</body>
+</html>

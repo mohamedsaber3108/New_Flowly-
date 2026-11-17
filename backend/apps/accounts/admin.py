@@ -1,0 +1,39 @@
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from unfold.admin import ModelAdmin as UnfoldModelAdmin
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+
+from .models import User
+
+
+@admin.register(User)
+class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
+    model = User
+
+    list_display = ["email", "full_name", "role", "status", "is_active", "is_deleted", "created_at"]
+    list_filter = ["role", "status", "is_active", "is_deleted", "is_staff"]
+    search_fields = ["email", "first_name", "last_name"]
+    ordering = ["-created_at"]
+    readonly_fields = ["uuid", "created_at", "updated_at", "last_login", "date_joined", "deleted_at"]
+    compressed_fields = True
+    warn_unsaved_form = True
+
+    fieldsets = (
+        (None, {"fields": ("uuid", "email", "password")}),
+        ("Profile", {"fields": ("first_name", "last_name", "avatar")}),
+        (
+            "Access",
+            {"fields": ("role", "status", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
+        ),
+        ("Deletion", {"fields": ("is_deleted", "deleted_at")}),
+        ("Dates", {"fields": ("last_login", "date_joined", "created_at", "updated_at")}),
+    )
+    add_fieldsets = (
+        (
+            None,
+            {"classes": ("wide",), "fields": ("email", "first_name", "last_name", "role", "password1", "password2")},
+        ),
+    )

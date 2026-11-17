@@ -1,0 +1,4 @@
+import {services,industries,insights} from './catalog';
+export function sitePaths(){return ['/', '/services','/industries','/government','/about','/approach','/engagement','/insights',...services.map(s=>'/services/'+s.id),...industries.map(i=>'/industries/'+i.slug),...insights.map(a=>'/insights/'+a.slug)];}
+export function sitemapXml(origin:string){const base=origin.replace(/\/$/,'');return '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+sitePaths().map(p=>'  <url><loc>'+base+p+'</loc></url>').join('\n')+'\n</urlset>';}
+export function robotsText(origin:string){return `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /team\nDisallow: /status\nDisallow: /contact\nDisallow: /consultation\nDisallow: /start\nDisallow: /privacy\nDisallow: /terms\nSitemap: ${origin.replace(/\/$/,'')}/sitemap.xml\n`;}

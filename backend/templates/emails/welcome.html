@@ -1,0 +1,6 @@
+{% extends "emails/base.html" %}
+{% block content %}
+<p>Hi {{ name }},</p>
+<p>Welcome to Flowly. Your email address is verified. You can sign in to track your requests and manage your profile.</p>
+<p><a href="{{ site_url }}/account/" style="color:#7e22ce">Open your account</a></p>
+{% endblock %}

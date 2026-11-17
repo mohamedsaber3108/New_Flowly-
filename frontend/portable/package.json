@@ -1,0 +1,1 @@
+{"name":"flowly-ec2","version":"1.0.0","type":"module","private":true,"engines":{"node":">=22.13.0"},"scripts":{"start":"node server.mjs"},"dependencies":{"zod":"^3.25.76","@aws-sdk/client-bedrock-runtime":"^3.0.0"}}

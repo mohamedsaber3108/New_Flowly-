@@ -1,0 +1,29 @@
+[Unit]
+Description=Flowly Gunicorn (Django API)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=__APP_USER__
+Group=__APP_USER__
+WorkingDirectory=__BACKEND_DIR__
+Environment=DJANGO_SETTINGS_MODULE=config.settings.production
+# Secrets and configuration live in the .env file (KEY=value lines).
+EnvironmentFile=__BACKEND_DIR__/.env
+ExecStart=__BACKEND_DIR__/.venv/bin/gunicorn config.wsgi:application --workers 3 --bind 127.0.0.1:8000 -c __BACKEND_DIR__/gunicorn.conf.py
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=3
+# Graceful shutdown: SIGTERM lets workers finish in-flight requests (graceful_timeout in gunicorn.conf.py).
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=40
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

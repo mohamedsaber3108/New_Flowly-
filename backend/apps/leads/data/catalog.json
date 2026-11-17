@@ -1,0 +1,520 @@
+{
+ "services": [
+  {
+   "id": "ai-customer-support",
+   "name": [
+    "AI customer support",
+    "خدمة العملاء بالذكاء الاصطناعي"
+   ],
+   "desc": [
+    "A connected inbox, grounded answers and a smooth handover to your team.",
+    "صندوق وارد موحّد وإجابات من مصادر شركتك وتحويل سلس لفريقك."
+   ]
+  },
+  {
+   "id": "ai-sales",
+   "name": [
+    "AI sales & lead qualification",
+    "المبيعات وتأهيل العملاء بالذكاء الاصطناعي"
+   ],
+   "desc": [
+    "Capture intent, qualify opportunities and follow up while your team focuses on the right conversations.",
+    "التقط اهتمام العميل وأهّل الفرص وتابعها ليركّز فريقك على المحادثات المناسبة."
+   ]
+  },
+  {
+   "id": "ai-content",
+   "name": [
+    "AI content production",
+    "إنتاج المحتوى بالذكاء الاصطناعي"
+   ],
+   "desc": [
+    "A content engine that keeps your brand voice consistent from idea to approval and publishing.",
+    "محرك محتوى يحافظ على صوت علامتك من الفكرة إلى المراجعة والنشر."
+   ]
+  },
+  {
+   "id": "knowledge-rag",
+   "name": [
+    "Knowledge & enterprise search",
+    "المعرفة والبحث المؤسسي"
+   ],
+   "desc": [
+    "Make scattered documents useful through permission-aware search and answers linked to sources.",
+    "حوّل المستندات المتفرقة إلى بحث يراعي الصلاحيات وإجابات مرتبطة بالمصادر."
+   ]
+  },
+  {
+   "id": "crm-automation",
+   "name": [
+    "CRM setup & automation",
+    "إعداد CRM وأتمتة المبيعات"
+   ],
+   "desc": [
+    "A clear view of customers, deals and next steps, connected to your existing tools.",
+    "صورة واضحة للعملاء والصفقات والخطوات القادمة، مرتبطة بأدواتك."
+   ]
+  },
+  {
+   "id": "social-automation",
+   "name": [
+    "Social media automation",
+    "أتمتة وسائل التواصل"
+   ],
+   "desc": [
+    "Plan, approve and schedule your social presence in one organized workflow.",
+    "خطّط وراجع وجدول حضورك على السوشيال في مسار عمل منظّم."
+   ]
+  },
+  {
+   "id": "email-marketing",
+   "name": [
+    "Email marketing & lifecycle",
+    "التسويق بالبريد ورحلة العميل"
+   ],
+   "desc": [
+    "Relevant email journeys built around consent, segmentation and moments that matter.",
+    "رحلات بريد مبنية على الموافقة وتقسيم الجمهور واللحظات المهمة."
+   ]
+  },
+  {
+   "id": "workflow-automation",
+   "name": [
+    "Workflow automation",
+    "أتمتة إجراءات العمل"
+   ],
+   "desc": [
+    "Connect your systems and remove repetitive work, with visibility over every step.",
+    "اربط أنظمتك وقلّل العمل المتكرر مع متابعة كل خطوة."
+   ]
+  },
+  {
+   "id": "websites",
+   "name": [
+    "Websites & landing pages",
+    "المواقع وصفحات الهبوط"
+   ],
+   "desc": [
+    "Distinctive, fast experiences that turn interest into a clear next step.",
+    "تجارب مميّزة وسريعة تحوّل اهتمام العميل إلى خطوة واضحة."
+   ]
+  },
+  {
+   "id": "bi-analytics",
+   "name": [
+    "Business intelligence & analytics",
+    "ذكاء الأعمال والتحليلات"
+   ],
+   "desc": [
+    "Bring data together so decisions start with a shared picture of your business.",
+    "اجمع البيانات حتى تبدأ القرارات بصورة موحّدة عن الأعمال."
+   ]
+  },
+  {
+   "id": "real-estate",
+   "name": [
+    "Real estate sales operations",
+    "إدارة المبيعات العقارية"
+   ],
+   "desc": [
+    "Connect listings, buyer preferences and follow-ups in one sales journey.",
+    "اربط الوحدات وتفضيلات المشترين والمتابعات في رحلة بيع واحدة."
+   ]
+  },
+  {
+   "id": "restaurant-ordering",
+   "name": [
+    "Restaurant ordering & operations",
+    "طلبات وتشغيل المطاعم"
+   ],
+   "desc": [
+    "Connect your menu, orders and customer experience from click to pickup.",
+    "اربط قائمتك وطلباتك وتجربة العميل من النقر إلى الاستلام."
+   ]
+  },
+  {
+   "id": "cart-recovery",
+   "name": [
+    "E-commerce recovery & retention",
+    "استعادة السلات والاحتفاظ بالعملاء"
+   ],
+   "desc": [
+    "Recover missed opportunities with timely, relevant customer journeys.",
+    "استعد الفرص المفقودة برحلات عميل مناسبة وفي توقيتها."
+   ]
+  },
+  {
+   "id": "creator-repurposing",
+   "name": [
+    "Creator content repurposing",
+    "إعادة توظيف محتوى صُنّاع المحتوى"
+   ],
+   "desc": [
+    "Turn a long video or podcast into a coordinated library of useful content.",
+    "حوّل الفيديو الطويل أو البودكاست إلى مكتبة محتوى مفيدة ومترابطة."
+   ]
+  },
+  {
+   "id": "wl-marketing",
+   "name": [
+    "White-label marketing platform",
+    "منصة تسويق بعلامتك"
+   ],
+   "desc": [
+    "Give your agency a branded workspace for running client marketing.",
+    "امنح وكالتك مساحة بعلامتها لإدارة تسويق العملاء."
+   ]
+  },
+  {
+   "id": "wl-crm",
+   "name": [
+    "White-label CRM platform",
+    "منصة CRM بعلامتك"
+   ],
+   "desc": [
+    "Launch a customer management offering under your own brand.",
+    "أطلق خدمة إدارة العملاء تحت علامتك الخاصة."
+   ]
+  },
+  {
+   "id": "wl-support",
+   "name": [
+    "White-label AI support",
+    "منصة دعم ذكي بعلامتك"
+   ],
+   "desc": [
+    "Build your support offering around client-specific knowledge and workflows.",
+    "ابنِ خدمة دعم ترتكز على معرفة كل عميل وإجراءات فريقه."
+   ]
+  },
+  {
+   "id": "wl-content",
+   "name": [
+    "White-label content factory",
+    "مصنع محتوى بعلامتك"
+   ],
+   "desc": [
+    "A branded production workspace for agencies serving multiple clients.",
+    "مساحة إنتاج بعلامتك للوكالات التي تخدم عدة عملاء."
+   ]
+  },
+  {
+   "id": "ai-erp",
+   "name": [
+    "AI ERP & business operations",
+    "AI ERP وإدارة عمليات الأعمال"
+   ],
+   "desc": [
+    "Finance, inventory, procurement and people. Connected to intelligence that helps your team act.",
+    "المالية والمخزون والمشتريات والموظفون، مع ذكاء يساعد فريقك على العمل."
+   ]
+  },
+  {
+   "id": "private-ai",
+   "name": [
+    "Private & sovereign AI",
+    "الذكاء الاصطناعي الخاص والسيادي"
+   ],
+   "desc": [
+    "An AI environment shaped around where your data can live and who can access it.",
+    "بيئة ذكاء اصطناعي تناسب مكان حفظ بياناتك ومن يحق له الوصول إليها."
+   ]
+  },
+  {
+   "id": "custom-ai",
+   "name": [
+    "Custom AI & model integrations",
+    "AI مخصّص وتكاملات النماذج المغلقة"
+   ],
+   "desc": [
+    "Choose the right model and build your business logic around it, without forcing one provider.",
+    "اختر النموذج المناسب وابنِ منطق أعمالك حوله دون فرض مزوّد واحد."
+   ]
+  },
+  {
+   "id": "ai-agents",
+   "name": [
+    "AI agents & copilots",
+    "وكلاء AI والمساعدون"
+   ],
+   "desc": [
+    "Assistants that use your tools, follow defined workflows and involve a person when needed.",
+    "مساعدون يستخدمون أدواتك ويتبعون إجراءات محددة ويرجعون للبشر عند الحاجة."
+   ]
+  },
+  {
+   "id": "voice-ai",
+   "name": [
+    "Voice & conversation intelligence",
+    "الصوت وتحليل المحادثات"
+   ],
+   "desc": [
+    "Turn conversations into organized notes, next steps and searchable knowledge.",
+    "حوّل المحادثات إلى ملاحظات وخطوات قادمة ومعرفة قابلة للبحث."
+   ]
+  },
+  {
+   "id": "document-ai",
+   "name": [
+    "Document AI & extraction",
+    "ذكاء المستندات واستخراج البيانات"
+   ],
+   "desc": [
+    "Move from piles of documents to structured data and reviewable workflows.",
+    "انتقل من تكدّس المستندات إلى بيانات منظّمة وإجراءات قابلة للمراجعة."
+   ]
+  },
+  {
+   "id": "ai-strategy",
+   "name": [
+    "AI strategy & readiness",
+    "استراتيجية AI وتقييم الجاهزية"
+   ],
+   "desc": [
+    "Prioritize the right opportunities before committing to a build.",
+    "رتّب الفرص المناسبة قبل الالتزام بالتنفيذ."
+   ]
+  },
+  {
+   "id": "hr-recruitment",
+   "name": [
+    "HR & recruitment systems",
+    "أنظمة الموارد البشرية والتوظيف"
+   ],
+   "desc": [
+    "Connect the employee lifecycle, from applications to onboarding and internal support.",
+    "اربط دورة الموظف من التقديم إلى التهيئة والدعم الداخلي."
+   ]
+  },
+  {
+   "id": "finance-automation",
+   "name": [
+    "Finance & invoice automation",
+    "أتمتة المالية والفواتير"
+   ],
+   "desc": [
+    "Simplify document intake, approvals and financial reporting.",
+    "بسّط استقبال المستندات والموافقات والتقارير المالية."
+   ]
+  },
+  {
+   "id": "data-engineering",
+   "name": [
+    "Data engineering & forecasting",
+    "هندسة البيانات والتنبؤ"
+   ],
+   "desc": [
+    "Build a reliable foundation for analytics and predictive use cases.",
+    "ابنِ أساسًا موثوقًا للتحليلات وحالات التنبؤ."
+   ]
+  },
+  {
+   "id": "seo-intelligence",
+   "name": [
+    "SEO & marketing intelligence",
+    "SEO وذكاء التسويق"
+   ],
+   "desc": [
+    "Connect content planning, search performance and campaign reporting.",
+    "اربط تخطيط المحتوى وأداء البحث وتقارير الحملات."
+   ]
+  },
+  {
+   "id": "commerce",
+   "name": [
+    "E-commerce & customer experience",
+    "التجارة الإلكترونية وتجربة العميل"
+   ],
+   "desc": [
+    "Connect your storefront, operations and customer journeys.",
+    "اربط واجهة متجرك والعمليات ورحلات العملاء."
+   ]
+  },
+  {
+   "id": "creative-studio",
+   "name": [
+    "AI image, video & creative workflows",
+    "إجراءات الصور والفيديو والإبداع بالـAI"
+   ],
+   "desc": [
+    "A repeatable production system, with human direction and brand review.",
+    "نظام إنتاج قابل للتكرار بإشراف بشري ومراجعة للعلامة."
+   ]
+  },
+  {
+   "id": "software-products",
+   "name": [
+    "Custom software & SaaS",
+    "البرمجيات المخصّصة ومنتجات SaaS"
+   ],
+   "desc": [
+    "From a focused prototype to a maintainable product your team can grow.",
+    "من نموذج أولي محدّد إلى منتج قابل للصيانة والنمو."
+   ]
+  },
+  {
+   "id": "open-source-implementation",
+   "name": [
+    "Open-source implementation",
+    "تنفيذ وتخصيص المصادر المفتوحة"
+   ],
+   "desc": [
+    "Find the right foundations, customize the gaps and connect them into a working system.",
+    "اختر الأساس المناسب وخصّص ما ينقصه واربطه ليصبح نظامًا يعمل."
+   ]
+  },
+  {
+   "id": "cloud-devops",
+   "name": [
+    "Cloud, DevOps & managed operations",
+    "السحابة وDevOps والتشغيل المُدار"
+   ],
+   "desc": [
+    "Keep your systems deployable, observable and ready to recover.",
+    "اجعل أنظمتك قابلة للنشر والمراقبة والاستعادة."
+   ]
+  },
+  {
+   "id": "security-identity",
+   "name": [
+    "Identity & defensive security",
+    "الهوية والأمن الدفاعي"
+   ],
+   "desc": [
+    "Bring clear access, auditability and monitoring to your digital operations.",
+    "أضف صلاحيات واضحة وتدقيقًا ومراقبة لعملياتك الرقمية."
+   ]
+  },
+  {
+   "id": "citizen-services",
+   "name": [
+    "Citizen & business service portals",
+    "بوابات خدمات المواطنين والأعمال"
+   ],
+   "desc": [
+    "A clear front door for applications, requests and progress tracking.",
+    "بوابة واضحة للتقديم وطلبات الخدمة وتتبع التقدم."
+   ]
+  },
+  {
+   "id": "government-workflows",
+   "name": [
+    "Government workflow modernization",
+    "تحديث إجراءات الجهات الحكومية"
+   ],
+   "desc": [
+    "Digitize requests, approvals and correspondence with a traceable workflow.",
+    "رقمن الطلبات والموافقات والمراسلات بإجراءات قابلة للتتبع."
+   ]
+  },
+  {
+   "id": "sovereign-knowledge",
+   "name": [
+    "Sovereign government knowledge",
+    "المعرفة الحكومية السيادية"
+   ],
+   "desc": [
+    "Make approved knowledge searchable inside your chosen hosting boundary.",
+    "اجعل المعرفة المعتمدة قابلة للبحث داخل حدود الاستضافة المختارة."
+   ]
+  },
+  {
+   "id": "public-data",
+   "name": [
+    "Public-sector data & decision support",
+    "بيانات القطاع العام ودعم القرار"
+   ],
+   "desc": [
+    "Unify reporting across departments and turn service data into insight.",
+    "وحّد التقارير بين الإدارات وحوّل بيانات الخدمات إلى معرفة."
+   ]
+  },
+  {
+   "id": "education",
+   "name": [
+    "Education & learning platforms",
+    "منصات التعليم والتعلّم"
+   ],
+   "desc": [
+    "Connect courses, assessments, content and learning assistants.",
+    "اربط الدورات والتقييمات والمحتوى ومساعدي التعلّم."
+   ]
+  },
+  {
+   "id": "healthcare",
+   "name": [
+    "Healthcare administration",
+    "إدارة الخدمات الصحية"
+   ],
+   "desc": [
+    "Reduce administrative friction across appointments and patient communication.",
+    "خفّف عبء الإدارة في المواعيد والتواصل مع المرضى."
+   ]
+  },
+  {
+   "id": "manufacturing",
+   "name": [
+    "Manufacturing & supply chain",
+    "التصنيع وسلاسل الإمداد"
+   ],
+   "desc": [
+    "Connect planning, stock, procurement and operational insight.",
+    "اربط التخطيط والمخزون والمشتريات والرؤية التشغيلية."
+   ]
+  },
+  {
+   "id": "logistics",
+   "name": [
+    "Logistics & field operations",
+    "اللوجستيات والعمليات الميدانية"
+   ],
+   "desc": [
+    "Bring dispatch, tracking and customer updates into the same workflow.",
+    "اجمع التوزيع والتتبع وتحديثات العملاء في مسار واحد."
+   ]
+  },
+  {
+   "id": "events",
+   "name": [
+    "Events & attendee experience",
+    "الفعاليات وتجربة الحضور"
+   ],
+   "desc": [
+    "A connected event journey from registration to check-in and follow-up.",
+    "رحلة فعالية متصلة من التسجيل إلى الدخول والمتابعة."
+   ]
+  },
+  {
+   "id": "legal-documents",
+   "name": [
+    "Legal & professional workflows",
+    "إجراءات الأعمال القانونية والمهنية"
+   ],
+   "desc": [
+    "Keep documents, deadlines and internal knowledge organized for professional review.",
+    "نظّم المستندات والمواعيد والمعرفة الداخلية للمراجعة المهنية."
+   ]
+  }
+ ],
+ "industries": [
+  "startups",
+  "enterprise",
+  "agencies",
+  "retail",
+  "real-estate",
+  "manufacturing",
+  "finance",
+  "education",
+  "healthcare",
+  "hospitality",
+  "logistics",
+  "events",
+  "legal",
+  "government"
+ ],
+ "insights": [
+  "ai-erp-beyond-chat",
+  "open-source-to-business",
+  "private-ai-right-fit"
+ ]
+}
