@@ -102,3 +102,80 @@ def test_dashboard_reports_live_figures(admin_client):
     assert {s["label"]: s["count"] for s in ctx["flowly_by_kind"]}["Consultation"] == 1
     assert ctx["flowly_upcoming"] == 1 and b"Booked Org" in response.content and b"Ministry X" in response.content
     assert b"status__exact=pending_review" in response.content
+
+
+def _change_form_data(admin_client, req, **changes):
+    """Current change-form values (including inline management forms) with the given edits applied."""
+    from django.urls import reverse
+
+    url = reverse("admin:leads_request_change", args=[req.pk])
+    form = admin_client.get(url).context["adminform"].form
+    data = {name: form[name].value() or "" for name in form.fields}
+    data.update({k: "" if v is None else v for k, v in changes.items()})
+    for prefix, count in (("appointments", req.appointments.count()), ("events", req.events.count())):
+        data.update(
+            {
+                f"{prefix}-TOTAL_FORMS": str(count),
+                f"{prefix}-INITIAL_FORMS": str(count),
+                f"{prefix}-MIN_NUM_FORMS": "0",
+                f"{prefix}-MAX_NUM_FORMS": "1000",
+            }
+        )
+    for i, a in enumerate(req.appointments.order_by("pk")):
+        data.update(
+            {
+                f"appointments-{i}-id": str(a.pk),
+                f"appointments-{i}-request": str(req.pk),
+                f"appointments-{i}-status": a.status,
+            }
+        )
+    for i, e in enumerate(req.events.order_by("created_at", "pk")):
+        data.update({f"events-{i}-id": str(e.pk), f"events-{i}-request": str(req.pk)})
+    return url, data
+
+
+def test_admin_status_edit_frees_slot_emails_customer_and_logs_actor(admin_client):
+    from django.core import mail
+
+    req = RequestFactory()
+    AppointmentFactory(request=req)
+    url, data = _change_form_data(admin_client, req, status="declined", internal_note="Out of scope")
+    mail.outbox.clear()
+    response = admin_client.post(url, data)
+    assert response.status_code == 302, getattr(response, "context", {}) and response.context["adminform"].form.errors
+    req.refresh_from_db()
+    assert req.status == "declined" and req.internal_note == "Out of scope"
+    assert Appointment.objects.get(request=req).status == "canceled"
+    event = req.events.get(event_type="status_changed")
+    assert event.status == "declined" and event.actor.email == "root@example.test"
+    assert len(mail.outbox) == 1 and req.reference in mail.outbox[0].subject
+
+
+def test_admin_status_edit_reports_slot_conflict_instead_of_crashing(admin_client):
+    old = RequestFactory(status="canceled")
+    AppointmentFactory(request=old, status="canceled")
+    AppointmentFactory(request=RequestFactory())
+    url, data = _change_form_data(admin_client, old, status="confirmed")
+    response = admin_client.post(url, data, follow=True)
+    assert response.status_code == 200
+    assert Request.objects.get(pk=old.pk).status == "canceled"
+    assert "slot is now held" in response.content.decode()
+
+
+def test_admin_assignee_choices_are_active_team_members(admin_client):
+    from django.urls import reverse
+
+    from tests.factories import StaffFactory
+
+    staff = StaffFactory(email="crew@example.test")
+    UserFactory(email="customer@example.test")
+    gone = StaffFactory(email="gone@example.test")
+    gone.soft_delete()
+    req = RequestFactory()
+    form = admin_client.get(reverse("admin:leads_request_change", args=[req.pk])).context["adminform"].form
+    emails = set(form.fields["assigned_to"].queryset.values_list("email", flat=True))
+    assert "crew@example.test" in emails and "customer@example.test" not in emails and "gone@example.test" not in emails
+    url, data = _change_form_data(admin_client, req, assigned_to=str(staff.pk))
+    assert admin_client.post(url, data).status_code == 302
+    req.refresh_from_db()
+    assert req.assigned_to == staff and req.events.filter(event_type="assigned").exists()

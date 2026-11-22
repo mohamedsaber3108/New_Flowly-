@@ -83,12 +83,41 @@ class RequestAdmin(UnfoldModelAdmin):
             "<pre style='white-space:pre-wrap'>{}</pre>", json.dumps(obj.details, indent=2, ensure_ascii=False)
         )
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "assigned_to":  # only active team members can own a request
+            from apps.accounts.models import User
+
+            kwargs["queryset"] = User.objects.filter(
+                role__in=["owner", "staff"], is_active=True, is_deleted=False
+            ).order_by("email")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):
-        if change and "status" in form.changed_data:
+        """Status, note and assignee edits go through services.update_request, exactly like the /team console
+        and the API: appointments follow the status, the customer is emailed, events record the admin."""
+        tracked = {"status", "internal_note", "assigned_to"}
+        if not change or not tracked & set(form.changed_data):
             super().save_model(request, obj, form, change)
-            RequestEvent.objects.create(request=obj, event_type="status_changed", status=obj.status, actor=request.user)
-        else:
-            super().save_model(request, obj, form, change)
+            return
+        stored = Request.objects.get(pk=obj.pk)
+        wanted = {f: getattr(obj, f) for f in tracked}
+        for f in tracked:  # save other edited fields first, without the tracked ones
+            setattr(obj, f, getattr(stored, f))
+        super().save_model(request, obj, form, change)
+        try:
+            services.update_request(
+                obj,
+                status=wanted["status"] if "status" in form.changed_data else None,
+                internal_note=wanted["internal_note"] if "internal_note" in form.changed_data else None,
+                assigned_to=wanted["assigned_to"],
+                assign="assigned_to" in form.changed_data,
+                actor=request.user,
+            )
+        except services.SlotTaken:
+            messages.error(
+                request,
+                f"{obj.reference}: status not changed. Its consultation slot is now held by another request.",
+            )
 
     @action(description="Export selected as CSV")
     def export_csv(self, request, queryset):
