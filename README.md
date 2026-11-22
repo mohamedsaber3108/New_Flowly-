@@ -14,6 +14,8 @@ The React app is used **as is**. Its original API contract (`/api/requests`, `/a
 `/sitemap.xml`) is implemented by Django with identical request and response shapes, so the
 Intake wizard, status page, assistant and `/team` console work without code changes.
 
+Full technical report (architecture, APIs, security, tests, known limits): `docs/TECHNICAL_REPORT.md`.
+
 ## What the backend provides
 
 | Area | Endpoints |
@@ -66,7 +68,7 @@ Development uses SQLite when `DATABASE_URL` is unset; production requires Postgr
 ### Tests and quality
 ```powershell
 cd backend
-.venv\Scripts\python -m pytest -q          # 148 tests (unit + integration)
+.venv\Scripts\python -m pytest -q          # 153 tests (unit + integration)
 .venv\Scripts\python -m flake8 apps config tests
 .venv\Scripts\python -m black --check --line-length 120 apps config tests
 
