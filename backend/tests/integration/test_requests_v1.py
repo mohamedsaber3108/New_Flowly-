@@ -277,3 +277,9 @@ def test_team_console_history_works_with_admin_token_and_staff_jwt(api, staff, s
 
     by_jwt = api.get(url, HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(staff).access_token}")
     assert by_jwt.status_code == 200
+
+
+def test_account_portal_shows_google_only_when_configured(api, settings):
+    assert b'data-google="1"' in api.get("/account/").content
+    settings.GOOGLE_CLIENT_ID = ""
+    assert b'data-google="0"' in api.get("/account/").content

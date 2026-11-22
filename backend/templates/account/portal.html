@@ -4,13 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#f8f6f0">
   <title>My Flowly account</title>
+  <link rel="icon" href="/favicon.svg">
+  <script>
+    /* Apply the visitor's language and theme before first paint (same keys as the main site). */
+    (function () {
+      try {
+        var ar = localStorage.getItem('flowly-language') === 'ar';
+        document.documentElement.lang = ar ? 'ar' : 'en';
+        document.documentElement.dir = ar ? 'rtl' : 'ltr';
+        document.documentElement.setAttribute('data-theme', localStorage.getItem('flowly-theme') === 'dark' ? 'dark' : 'light');
+      } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="{% static 'account/portal.css' %}">
 </head>
-<body>
+<body data-google="{{ google_enabled|yesno:'1,0' }}">
+  <a class="skip" href="#app">Skip to content</a>
   <header class="bar">
-    <a class="brand" href="/">Flowly</a>
+    <a class="brand" href="/" aria-label="Flowly home"><span>flowly</span><span class="dot">.</span></a>
     <nav id="nav" aria-label="Account"></nav>
+    <div id="tools" class="tools"></div>
   </header>
   <main id="app" tabindex="-1" aria-live="polite"></main>
   <script src="{% static 'account/portal.js' %}" defer></script>

@@ -4,22 +4,102 @@
 {% block breadcrumbs %}{% endblock %}
 
 {% block content %}
-  <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
-      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Total requests</div>
-      <div class="text-2xl font-semibold">{{ flowly_total_requests }}</div>
-    </div>
-    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
-      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Pending review</div>
-      <div class="text-2xl font-semibold">{{ flowly_pending }}</div>
-    </div>
-    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
-      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">In progress</div>
-      <div class="text-2xl font-semibold">{{ flowly_in_progress }}</div>
-    </div>
-    <div class="p-6 bg-white border border-base-200 rounded-default dark:bg-base-900 dark:border-base-800">
-      <div class="text-sm text-font-subtle-light dark:text-font-subtle-dark">Active consultation slots</div>
-      <div class="text-2xl font-semibold">{{ flowly_upcoming }}</div>
-    </div>
+<style>
+  .fl-grid{display:grid;gap:16px}
+  .fl-cards{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-bottom:24px}
+  .fl-two{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-bottom:24px}
+  .fl-card{padding:20px;border-radius:12px}
+  .fl-label{font-size:13px;opacity:.7}
+  .fl-value{font-size:28px;font-weight:600;line-height:1.2;margin-top:4px}
+  .fl-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;font-size:14px}
+  .fl-bar{height:6px;border-radius:99px;margin-top:2px}
+  .fl-chart{display:flex;align-items:flex-end;gap:10px;height:140px;padding-top:8px}
+  .fl-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:11px}
+  .fl-col span.v{font-weight:600;margin-bottom:4px}
+  .fl-col div{width:100%;border-radius:6px 6px 0 0}
+  .fl-table{width:100%;font-size:14px;border-collapse:collapse}
+  .fl-table td,.fl-table th{padding:8px 6px;text-align:start;border-bottom:1px solid rgba(127,127,127,.18)}
+  .fl-table th{font-weight:600;opacity:.7}
+</style>
+
+<div class="fl-grid fl-cards">
+  <a href="{{ flowly_requests_url }}" class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Total requests</div><div class="fl-value">{{ flowly_total_requests }}</div>
+  </a>
+  <div class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Last 30 days</div><div class="fl-value">{{ flowly_last_30 }}</div>
   </div>
+  <a href="{{ flowly_pending_url }}" class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Pending review</div><div class="fl-value text-primary-600">{{ flowly_pending }}</div>
+  </a>
+  <div class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Open pipeline</div><div class="fl-value">{{ flowly_open }}</div>
+  </div>
+  <div class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Upcoming consultations</div><div class="fl-value">{{ flowly_upcoming }}</div>
+  </div>
+  <div class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <div class="fl-label">Customer accounts</div><div class="fl-value">{{ flowly_customers }}</div>
+  </div>
+</div>
+
+<div class="fl-grid fl-two">
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Requests per week (last 8 weeks)</h2>
+    <div class="fl-chart">
+      {% for p in flowly_weekly %}
+        <div class="fl-col"><span class="v">{{ p.count }}</span><div class="bg-primary-500" style="height:{{ p.height }}%"></div><span>{{ p.label }}</span></div>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Pipeline by status</h2>
+    {% for s in flowly_by_status %}
+      <a class="fl-row hover:text-primary-600" href="{{ s.url }}"><span>{{ s.label }}</span><strong>{{ s.count }}</strong></a>
+    {% endfor %}
+  </section>
+</div>
+
+<div class="fl-grid fl-two">
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">By request type</h2>
+    {% for s in flowly_by_kind %}
+      <a class="fl-row hover:text-primary-600" href="{{ s.url }}"><span>{{ s.label }}</span><strong>{{ s.count }} · {{ s.percent }}%</strong></a>
+      <div class="fl-bar bg-primary-500" style="width:{{ s.percent }}%"></div>
+    {% endfor %}
+  </section>
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">By audience</h2>
+    {% for s in flowly_by_audience %}
+      <a class="fl-row hover:text-primary-600" href="{{ s.url }}"><span>{{ s.label }}</span><strong>{{ s.count }} · {{ s.percent }}%</strong></a>
+      <div class="fl-bar bg-primary-500" style="width:{{ s.percent }}%"></div>
+    {% endfor %}
+  </section>
+</div>
+
+<div class="fl-grid fl-two">
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Next consultations (Cairo time)</h2>
+    {% if flowly_next_appointments %}
+      <table class="fl-table"><thead><tr><th>Date</th><th>Time</th><th>Request</th><th>Status</th></tr></thead><tbody>
+      {% for a in flowly_next_appointments %}
+        <tr><td>{{ a.date|date:"D d M" }}</td><td>{{ a.time }}</td>
+          <td><a class="text-primary-600" href="{% url 'admin:leads_request_change' a.request_id %}">{{ a.request.organization }}</a></td>
+          <td>{{ a.get_status_display }}</td></tr>
+      {% endfor %}
+      </tbody></table>
+    {% else %}<p class="opacity-70">No upcoming consultations.</p>{% endif %}
+  </section>
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Latest requests</h2>
+    {% if flowly_recent %}
+      <table class="fl-table"><thead><tr><th>Reference</th><th>Organization</th><th>Status</th></tr></thead><tbody>
+      {% for r in flowly_recent %}
+        <tr><td><a class="text-primary-600" href="{% url 'admin:leads_request_change' r.pk %}">{{ r.reference }}</a></td>
+          <td>{{ r.organization }}</td><td>{{ r.get_status_display }}</td></tr>
+      {% endfor %}
+      </tbody></table>
+    {% else %}<p class="opacity-70">No requests yet.</p>{% endif %}
+  </section>
+</div>
 {% endblock %}

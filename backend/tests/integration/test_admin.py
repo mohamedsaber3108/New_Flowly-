@@ -86,3 +86,19 @@ def test_admin_url_is_configurable(settings):
 
     assert settings.ADMIN_URL.endswith("/")
     assert urls.urlpatterns[0].pattern._route == settings.ADMIN_URL
+
+
+def test_dashboard_reports_live_figures(admin_client):
+    RequestFactory(status="pending_review", kind="consultation", audience="government", organization="Ministry X")
+    RequestFactory(status="confirmed", kind="contact")
+    AppointmentFactory(
+        request=RequestFactory(organization="Booked Org"), date="2099-01-05", slot="2099-01-05T10:00", time="10:00"
+    )
+    response = admin_client.get("/admin/")
+    ctx = response.context
+    assert response.status_code == 200
+    assert ctx["flowly_total_requests"] == 3 and ctx["flowly_pending"] == 2 and ctx["flowly_last_30"] == 3
+    assert sum(p["count"] for p in ctx["flowly_weekly"]) == 3, "all of this week's requests are in the chart"
+    assert {s["label"]: s["count"] for s in ctx["flowly_by_kind"]}["Consultation"] == 1
+    assert ctx["flowly_upcoming"] == 1 and b"Booked Org" in response.content and b"Ministry X" in response.content
+    assert b"status__exact=pending_review" in response.content

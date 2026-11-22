@@ -41,3 +41,9 @@ frontend/.sites-runtime/
 
 # Server-side deploy state (previous commit for rollback.sh)
 .deploy/
+
+# Visual-check screenshots
+e2e/screens/
+
+# Any node_modules folder (including Vite's dev cache under frontend/portable)
+node_modules/

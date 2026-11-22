@@ -3,6 +3,7 @@ import logging
 from django.conf import settings
 from django.http import HttpResponseRedirect
 from django.utils import timezone
+from django.views.generic import TemplateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -378,3 +379,14 @@ class ChangePasswordView(GenericAPIView):
         request.user.set_password(serializer.validated_data["new_password"])
         request.user.save(update_fields=["password"])
         return Response({"message": "Password changed.", "data": None})
+
+
+class PortalView(TemplateView):
+    """Account portal page (login, register, dashboard, profile). Talks to /api/v1 from the browser."""
+
+    template_name = "account/portal.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["google_enabled"] = bool(settings.GOOGLE_CLIENT_ID and settings.GOOGLE_CLIENT_SECRET)
+        return context

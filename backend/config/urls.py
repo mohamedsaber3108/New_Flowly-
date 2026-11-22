@@ -7,6 +7,7 @@ from django.views.generic import TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 from apps.accounts.urls import auth_patterns, user_patterns
+from apps.accounts.views import PortalView
 from apps.core.views import HealthView
 from apps.leads import legacy_views
 from apps.leads.urls import legacy_patterns, v1_patterns
@@ -43,7 +44,7 @@ urlpatterns = [
         name="password-reset-complete",
     ),
     # Account portal (login, register, dashboard, profile) - vanilla JS, talks to /api/v1
-    path("account/", TemplateView.as_view(template_name="account/portal.html"), name="account-portal"),
+    path("account/", PortalView.as_view(), name="account-portal"),
 ]
 
 if settings.DEBUG:
