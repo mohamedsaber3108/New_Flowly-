@@ -1,7 +1,7 @@
 # Flowly: technical report
 
 Status as of commit `13cd78e` on `main` (github.com/mohamedsaber3108/New_Flowly-), deployed to
-`https://13-53-243-42.sslip.io` on AWS EC2 (eu-north-1, t3.large, Ubuntu 26.04).
+`https://flowly.usamif.com` on AWS EC2 (eu-north-1, t3.large, Ubuntu 26.04, server IP 13.53.243.42).
 
 Each claim below is tagged:
 - **Verified**: executed and observed (tests, browser runs, production checks).
@@ -194,7 +194,7 @@ Test data uses `e2e-*@example.test` addresses and is removed with `manage.py pur
 **External actions:**
 
 4. **Elastic IP:** attach one to the instance, otherwise the address changes when it stops.
-5. **Domain:** point an `A` record at the Elastic IP, then follow section 10.
+5. **Domain:** done. The `flowly.usamif.com` A record points at 13.53.243.42. If you attach an Elastic IP, update that record to the new IP.
 6. **Off-server backups:** copy `/var/backups/flowly` to S3 or similar.
 
 **Not built**, because this product sells scoped engagements and none of these are part of it:
