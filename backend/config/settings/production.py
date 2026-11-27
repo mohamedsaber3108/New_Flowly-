@@ -29,6 +29,10 @@ EMAIL_BACKEND = config(
     ),
 )
 
+# Give up on a mail server that does not answer after 10 seconds (Django's default is no timeout), so a slow or
+# dead SMTP host cannot hold a gunicorn worker while a visitor waits for their request to be saved.
+EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=10, cast=int)
+
 # TLS terminates at Nginx, which sets X-Forwarded-Proto.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
