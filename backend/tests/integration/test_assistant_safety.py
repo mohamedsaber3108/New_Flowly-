@@ -118,6 +118,48 @@ def test_links_without_a_scheme_to_other_hosts_are_refused(api, ai_on, bad):
     assert body["source"] == "guide" and "evil" not in body["reply"].lower()
 
 
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "Pay at 1.2.3.4/pay today.",
+        "Visit 203.0.113.9 now.",
+        "Go to 10.0.0.1:8080/admin please.",
+        "Open http://10.0.0.1 now.",
+        "Open https://192.168.1.5/x now.",
+        "Try [::1]/x for details.",
+        "Try [2001:db8::1]:8080/x for details.",
+        "Open http://[::1]/x now.",
+        "Open //[fe80::1]/x now.",
+        "See (999.1.1.1/x).",  # not a valid address: still refused, as it looks like one
+    ],
+)
+def test_links_to_bare_ip_addresses_are_refused_unless_the_ip_is_a_site_host(api, ai_on, bad):
+    with mock.patch.dict(assistant._CALLERS, {"compatible": lambda *a: bad}):
+        body = ask(api, "erp").json()
+    assert body["source"] == "guide", bad
+
+
+def test_a_bare_ip_that_is_a_site_host_is_allowed_and_plain_numbers_are_not_refused(api, ai_on, settings):
+    settings.ALLOWED_HOSTS = ["testserver", "127.0.0.1", "::1"]
+    for fine in (
+        "See 127.0.0.1/services for details.",
+        "See http://127.0.0.1:8000/contact.",
+        "See [::1]/contact too.",
+        "Sessions are 30 min, from 10:00 to 15:00, version 2.5 or 1.2.3 of the plan; call 0100 123 4567.",
+    ):
+        with mock.patch.dict(assistant._CALLERS, {"compatible": lambda *a, fine=fine: fine}):
+            assert ask(api, "erp").json()["source"] == "ai", fine
+    with mock.patch.dict(assistant._CALLERS, {"compatible": lambda *a: "See 127.0.0.2/x."}):
+        assert ask(api, "erp").json()["source"] == "guide"  # a different address is not the site
+
+
+def test_the_link_check_never_crashes_on_an_odd_address(api, ai_on):
+    for odd in ("Open http://[::1 now.", "Open [::1 now.", "Open http://[bad]/x now."):
+        with mock.patch.dict(assistant._CALLERS, {"compatible": lambda *a, odd=odd: odd}):
+            body = ask(api, "erp").json()
+        assert body["source"] in ("ai", "guide") and "unavailable" not in body["reply"]  # judged, not an error
+
+
 def test_site_hosts_without_a_scheme_and_plain_text_are_not_refused(api, ai_on, settings):
     for fine in (
         "See flowly.test/services/ai-erp for details.",
