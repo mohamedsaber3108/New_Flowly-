@@ -99,7 +99,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
-PASSWORD_HASHERS = ["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+# Argon2 first; PBKDF2 stays second so existing hashes still verify and are upgraded to Argon2 on the next login.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+]
 
 # Email verification is enforced at login by the API. Set to False only for demos.
 # Defaults to ON only when SMTP credentials are configured: without a mail server nobody could ever verify,

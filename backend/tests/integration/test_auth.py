@@ -3,6 +3,7 @@ from unittest import mock
 
 import pytest
 from allauth.account.models import EmailAddress
+from django.contrib.auth.hashers import make_password
 from django.core import mail
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
@@ -102,6 +103,24 @@ def test_resend_verification_never_reveals_accounts(api):
     b = api.post(f"{V1}/auth/resend-verification/", {"email": "ghost@example.test"}, format="json")
     assert a.status_code == b.status_code == 200 and a.json()["message"] == b.json()["message"]
     assert len(mail.outbox) == 1
+
+
+def test_login_upgrades_pbkdf2_hash_to_argon2(api, user, settings):
+    # test.py uses MD5 for speed; use the real production list here.
+    settings.PASSWORD_HASHERS = [
+        "django.contrib.auth.hashers.Argon2PasswordHasher",
+        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    ]
+    user.password = make_password(PASSWORD, hasher="pbkdf2_sha256")
+    user.save(update_fields=["password"])
+    assert user.password.startswith("pbkdf2_sha256$")
+
+    r = api.post(f"{V1}/auth/login/", {"email": user.email, "password": PASSWORD}, format="json")
+    assert r.status_code == 200
+
+    user.refresh_from_db()
+    assert user.password.startswith("argon2$")
+    assert user.check_password(PASSWORD)
 
 
 def test_login_wrong_password_is_401(api, user):
