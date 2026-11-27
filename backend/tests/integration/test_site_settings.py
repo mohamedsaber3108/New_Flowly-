@@ -6,6 +6,7 @@ The defaults must reproduce the behaviour from before the settings existed: Sund
 
 import json
 import logging
+import uuid
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -109,10 +110,7 @@ def test_a_blocked_day_disappears_from_booking_at_once_and_other_days_stay(api, 
     assert refused.status_code == 400 and "working day" in refused.json()["error"]
     assert not Request.objects.exists()
     assert availability(api, other).json()["closed"] is False
-    assert (
-        post_request(api, {**payload, "date": other, "requestKey": "6f1c2f1e-5a3b-4c8e-9d7a-1b2c3d4e5f60"}).status_code
-        == 201
-    )
+    assert post_request(api, {**payload, "date": other, "requestKey": str(uuid.uuid4())}).status_code == 201
 
     BlockedDay.objects.filter(date=blocked).delete()  # unblock: open again at once
     assert availability(api, blocked).json()["closed"] is False
