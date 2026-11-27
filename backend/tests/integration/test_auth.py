@@ -3,11 +3,13 @@ from unittest import mock
 
 import pytest
 from allauth.account.models import EmailAddress
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core import mail
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.accounts.models import User
+from config.settings import base as base_settings
+from config.settings.base import build_password_hashers
 from tests.factories import PASSWORD, UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -105,22 +107,67 @@ def test_resend_verification_never_reveals_accounts(api):
     assert len(mail.outbox) == 1
 
 
-def test_login_upgrades_pbkdf2_hash_to_argon2(api, user, settings):
-    # test.py uses MD5 for speed; use the real production list here.
-    settings.PASSWORD_HASHERS = [
-        "django.contrib.auth.hashers.Argon2PasswordHasher",
-        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-    ]
+# --- password hashing flag (FL-20): PASSWORD_HASH_ARGON2 ---------------------------------------------------------
+# test.py uses MD5 for speed, so these tests set the real production list through the same builder base.py uses.
+
+
+def sign_in(api, user):
+    return api.post(f"{V1}/auth/login/", {"email": user.email, "password": PASSWORD}, format="json")
+
+
+def test_hasher_list_always_contains_both_and_the_flag_picks_the_first():
+    off, on = build_password_hashers(False), build_password_hashers(True)
+    assert off[0].endswith("PBKDF2PasswordHasher") and on[0].endswith("Argon2PasswordHasher")
+    assert sorted(off) == sorted(on) and len(off) == 2
+    assert base_settings.PASSWORD_HASH_ARGON2 is False  # the default is the rollback-safe one
+
+
+def test_flag_on_upgrades_a_pbkdf2_user_to_argon2_at_login(api, user, settings):
+    settings.PASSWORD_HASHERS = build_password_hashers(True)
     user.password = make_password(PASSWORD, hasher="pbkdf2_sha256")
     user.save(update_fields=["password"])
     assert user.password.startswith("pbkdf2_sha256$")
 
-    r = api.post(f"{V1}/auth/login/", {"email": user.email, "password": PASSWORD}, format="json")
-    assert r.status_code == 200
+    assert sign_in(api, user).status_code == 200
 
     user.refresh_from_db()
     assert user.password.startswith("argon2$")
     assert user.check_password(PASSWORD)
+
+
+def test_flag_off_keeps_pbkdf2_hashes_as_they_are(api, user, settings):
+    settings.PASSWORD_HASHERS = build_password_hashers(False)
+    user.password = make_password(PASSWORD, hasher="pbkdf2_sha256")
+    user.save(update_fields=["password"])
+    before = user.password
+
+    assert sign_in(api, user).status_code == 200
+
+    user.refresh_from_db()
+    assert user.password == before  # nothing is upgraded
+
+
+def test_flag_off_still_verifies_an_argon2_hash_so_a_rollback_never_locks_anyone_out(api, user, settings):
+    settings.PASSWORD_HASHERS = build_password_hashers(False)
+    user.password = make_password(PASSWORD, hasher="argon2")
+    user.save(update_fields=["password"])
+    assert user.password.startswith("argon2$")
+
+    assert sign_in(api, user).status_code == 200
+    wrong = api.post(f"{V1}/auth/login/", {"email": user.email, "password": "wrong"}, format="json")
+    assert wrong.status_code == 401
+
+    # With the flag off, Django also moves the hash back to the preferred hasher (PBKDF2) at login.
+    user.refresh_from_db()
+    assert user.password.startswith("pbkdf2_sha256$") and user.check_password(PASSWORD)
+
+
+def test_both_flag_states_verify_both_hash_kinds(settings):
+    for flag in (False, True):
+        settings.PASSWORD_HASHERS = build_password_hashers(flag)
+        for hasher in ("pbkdf2_sha256", "argon2"):
+            stored = make_password(PASSWORD, hasher=hasher)
+            assert check_password(PASSWORD, stored) and not check_password("nope", stored), (flag, hasher)
 
 
 def test_login_wrong_password_is_401(api, user):
