@@ -36,10 +36,19 @@ as_app git -C "$APP_DIR" checkout --detach "$TARGET"
 echo "==> reinstall dependencies and static files for that commit"
 as_app "$VENV/bin/pip" install --quiet -r "$BACKEND_DIR/requirements/production.txt"
 as_app bash -c "cd '$BACKEND_DIR' && DJANGO_SETTINGS_MODULE=config.settings.production '$VENV/bin/python' manage.py collectstatic --noinput"
-if [ -d "$APP_DIR/frontend/ec2-dist/public" ]; then
-  rm -rf "${FRONTEND_DIR:?}"/*
-  cp -a "$APP_DIR/frontend/ec2-dist/public/." "$FRONTEND_DIR/"
-  chmod -R a+rX "$FRONTEND_DIR"
+# Rebuild the frontend from the commit we just checked out (the ignored build folder may be from a newer commit).
+# Commits from before build-frontend.sh existed have no script: keep the files that are being served.
+FRONTEND_FAILED=0
+if [ -f "$APP_DIR/deploy/build-frontend.sh" ]; then
+  if APP_USER="$APP_USER" APP_DIR="$APP_DIR" bash "$APP_DIR/deploy/build-frontend.sh" &&
+     APP_DIR="$APP_DIR" FRONTEND_DIR="$FRONTEND_DIR" bash "$APP_DIR/deploy/publish-frontend.sh"; then
+    :
+  else
+    FRONTEND_FAILED=1
+    echo "WARNING: frontend rebuild or publish failed. The frontend files currently served were NOT changed. The backend rollback continues."
+  fi
+else
+  echo "NOTE: this commit has no build-frontend.sh. The frontend files currently served were NOT changed."
 fi
 chmod -R a+rX "$BACKEND_DIR/staticfiles"
 
@@ -50,9 +59,14 @@ nginx -t && systemctl reload nginx
 for i in $(seq 1 20); do
   if curl -fsS -H "X-Forwarded-Proto: https" http://127.0.0.1:8000/health/ >/dev/null 2>&1; then
     echo "Rolled back to $(as_app git -C "$APP_DIR" log --oneline -1). Healthy."
+    if [ "$FRONTEND_FAILED" -eq 1 ]; then
+      echo "!!! WARNING: the BACKEND is rolled back but the FRONTEND was NOT rebuilt. The served frontend is from before the rollback. Check the build errors above. Exiting non-zero on purpose. !!!" >&2
+      exit 2
+    fi
     exit 0
   fi
   sleep 2
 done
 echo "Health check failed after rollback: journalctl -u gunicorn -n 80 --no-pager"
+[ "$FRONTEND_FAILED" -eq 0 ] || echo "!!! WARNING: the frontend was also NOT rebuilt (see above). !!!" >&2
 exit 1
