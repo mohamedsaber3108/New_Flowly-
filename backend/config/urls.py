@@ -11,8 +11,11 @@ from apps.accounts.views import PortalView
 from apps.core.views import HealthView
 from apps.leads import legacy_views
 from apps.leads.urls import legacy_patterns, v1_patterns
+from apps.security.urls import api_patterns as security_api_patterns
+from apps.security.views import EnrollPageView
 
 api_v1 = [
+    path("auth/mfa/", include(security_api_patterns)),
     path("auth/", include(auth_patterns)),
     path("users/", include(user_patterns)),
     path("", include(v1_patterns)),
@@ -45,6 +48,8 @@ urlpatterns = [
     ),
     # Account portal (login, register, dashboard, profile) - vanilla JS, talks to /api/v1
     path("account/", PortalView.as_view(), name="account-portal"),
+    # Two-step verification setup for owner/staff (under /account/ so nginx already sends it to Django)
+    path("account/mfa/enroll/", EnrollPageView.as_view(), name="mfa-enroll-page"),
 ]
 
 if settings.DEBUG:

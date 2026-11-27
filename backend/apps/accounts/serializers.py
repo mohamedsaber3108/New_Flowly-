@@ -4,8 +4,26 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
+
+
+class MfaAwareRefreshSerializer(TokenRefreshSerializer):
+    """While REQUIRE_STAFF_MFA is on, owner/staff cannot refresh a token that was issued without a second factor
+    (for example one issued before the switch). Rotation keeps the "mfa" claim, so a proven session stays proven."""
+
+    def validate(self, attrs):
+        from apps.security import service as mfa_service
+
+        if settings.REQUIRE_STAFF_MFA:
+            token = RefreshToken(attrs["refresh"])  # an invalid or blacklisted token raises TokenError as usual
+            user = User.objects.filter(pk=token.get("user_id")).first()
+            if user is not None and mfa_service.is_team_user(user) and not token.get("mfa"):
+                raise TokenError("Sign in again with your verification code.")
+        return super().validate(attrs)
 
 
 def _validate_password(value, user=None):

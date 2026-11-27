@@ -106,7 +106,11 @@ class HealthView(LegacyAPIView):
                 "status": "ok",
                 "service": "flowly-web",
                 "storage": "ok",
-                "sharedAdminToken": bool(settings.ALLOW_SHARED_ADMIN_TOKEN and len(settings.ADMIN_TOKEN or "") >= 32),
+                "sharedAdminToken": bool(
+                    settings.ALLOW_SHARED_ADMIN_TOKEN
+                    and not settings.REQUIRE_STAFF_MFA
+                    and len(settings.ADMIN_TOKEN or "") >= 32
+                ),
             }
         )
 

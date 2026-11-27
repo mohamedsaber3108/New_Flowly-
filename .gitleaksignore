@@ -1,0 +1,2 @@
+# Test-only Fernet key in commit 7df8743 (backend/config/settings/test.py). Never used outside tests; replaced by a key generated at test time in the commit that adds this file. History is not rewritten.
+7df87436f30dbdbcadcde8016d8111b8c5205dd0:backend/config/settings/test.py:generic-api-key:18
