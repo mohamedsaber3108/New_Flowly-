@@ -31,3 +31,6 @@ overrides:
 auditConfig:
   ignoreGhsas:
     - GHSA-mrhx-c7xc-m3w5
+
+# The zod advisory (GHSA-mrhx-c7xc-m3w5) is ignored in one place only: the `pnpm audit --ignore` flag in
+# .github/workflows/ci.yml, next to its explanation. Do not add it here again.
