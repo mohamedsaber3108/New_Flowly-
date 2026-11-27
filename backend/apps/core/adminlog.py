@@ -1,8 +1,9 @@
 """One structured log line (logger "flowly.admin") for a change made in the admin. Never a secret.
 
-Until the audit log (PR #6) is merged, settings changes are recorded here. A follow-up (FL-21b) moves them into the
-audit log. A line is JSON: event, who (user id and email of a signed-in staff member), and what changed
-({"field": [old, new]}). The settings have no secret fields, so nothing here needs masking.
+Settings and blocked-day changes are ALSO written to the audit log (FL-21b, `audit.record`); this line stays as an
+operations log that can be read on the server without the admin. A line is JSON: event, who (user id and email of a
+signed-in staff member), and what changed ({"field": [old, new]}). The settings have no secret fields, so nothing here
+needs masking.
 """
 
 import json
