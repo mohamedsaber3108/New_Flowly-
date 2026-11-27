@@ -5,8 +5,10 @@
 #   sudo bash /var/www/flowly/deploy/build-frontend.sh
 #
 # Output: ${APP_DIR}/frontend/ec2-dist/public (git-ignored, never committed).
-# Idempotent: installs Node 22 only when missing or older, installs dependencies with the lockfile
-# (--frozen-lockfile), then runs the same vite build that CI runs on every pull request.
+# Idempotent: checks free memory first (MemAvailable >= 2048 MB, else exits before changing anything),
+# installs Node 22 only when missing or older (NodeSource apt repository, signed key owned by NodeSource),
+# installs dependencies with the lockfile (--frozen-lockfile, pnpm pinned by packageManager through Corepack),
+# then runs the same vite build that CI runs on every pull request, with the Node heap capped at 1536 MB.
 # Exits non-zero with a clear message when the build fails or index.html is missing, so deploy.sh
 # stops before it touches the live frontend files.
 # Writes one line (time, commit, sha256 of index.html) to ${APP_DIR}/.deploy/deploy.log.
@@ -22,9 +24,18 @@ NODE_MAJOR=22
 
 [ "$(id -u)" -eq 0 ] || { echo "Run as root (sudo)."; exit 1; }
 fail() { echo "FRONTEND BUILD FAILED: $*" >&2; exit 1; }
-as_app() { sudo -H -u "$APP_USER" env CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 "$@"; }
+# NODE_OPTIONS caps Node's heap at 1536 MB so a build cannot take the whole server away from gunicorn.
+as_app() { sudo -H -u "$APP_USER" env CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NODE_OPTIONS=--max-old-space-size=1536 "$@"; }
 
 [ -f "$FRONTEND_SRC/package.json" ] || fail "no frontend/package.json in ${APP_DIR}."
+
+# The build runs on the live server next to gunicorn. A Vite build can need 1 to 1.5 GB, so refuse to start when
+# less than MIN_AVAILABLE_MB (default 2048) is available. Nothing has been changed at this point.
+MIN_AVAILABLE_MB="${MIN_AVAILABLE_MB:-2048}"
+AVAILABLE_MB="$(awk '/^MemAvailable:/ {print int($2 / 1024)}' /proc/meminfo)"
+if [ "${AVAILABLE_MB:-0}" -lt "$MIN_AVAILABLE_MB" ]; then
+  fail "only ${AVAILABLE_MB:-unknown} MB of memory is available, ${MIN_AVAILABLE_MB} MB are needed to build safely. Nothing was changed. Free memory (or add swap, which is a server change for the owner) and run again."
+fi
 
 # frontend/package.json requires node >=22.13.0: compare the full version, not only the major.
 NODE_MIN="22.13.0"
