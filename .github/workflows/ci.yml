@@ -9,7 +9,9 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a newer push to a pull request replaces its older run. A push to main or a flowly/** branch always finishes,
+  # so a merge is never left without its full result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -98,10 +100,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Type check
+        if: ${{ !cancelled() }}
         run: pnpm exec tsc --noEmit -p tsconfig.json
+      - name: ESLint (includes jsx-a11y accessibility rules; errors fail, warnings are the TODO list in eslint.config.mjs)
+        if: ${{ !cancelled() }}
+        # --quiet prints errors only: the 825 warnings (mostly dense generated-style code) would fill the log.
+        run: pnpm lint --quiet
       - name: Build
+        id: build
+        if: ${{ !cancelled() }}
         run: pnpm exec vite build --config portable/vite.config.ts
       - name: Upload build
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: frontend-build
