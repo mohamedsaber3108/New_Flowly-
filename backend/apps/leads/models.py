@@ -36,6 +36,19 @@ class Request(TimeStampedModel):
         DECLINED = "declined", "Declined"
         CANCELED = "canceled", "Canceled"
 
+    class QuoteStatus(models.TextChoices):
+        NONE = "none", "No quote yet"
+        SENT = "sent", "Quote sent"
+        ACCEPTED = "accepted", "Quote accepted"
+        LOST = "lost", "Quote lost"
+
+    class ValueRange(models.TextChoices):
+        # The three EGP bands are placeholders (placeholder, owner confirms; question Q-F15). The labels can be changed
+        # later without a data change; changing the stored values would need a data migration.
+        UNDER_50K = "lt_50k", "Under 50k EGP"
+        FROM_50K_TO_200K = "50k_200k", "50k to 200k EGP"
+        OVER_200K = "gt_200k", "Over 200k EGP"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     reference = models.CharField(max_length=24, unique=True)
     kind = models.CharField(max_length=20, choices=Kind.choices, db_index=True)
@@ -54,6 +67,28 @@ class Request(TimeStampedModel):
     )
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="assigned_requests"
+    )
+    # Lead pipeline (FL-15). Team-only: none of these is ever shown to the customer.
+    source_page = models.CharField(
+        "Source page", max_length=255, blank=True, default="", help_text="Page the visitor came from, if sent."
+    )
+    utm_source = models.CharField("UTM source", max_length=100, blank=True, default="", db_index=True)
+    utm_medium = models.CharField("UTM medium", max_length=100, blank=True, default="")
+    utm_campaign = models.CharField("UTM campaign", max_length=100, blank=True, default="")
+    next_follow_up = models.DateField(
+        "Next follow-up", null=True, blank=True, db_index=True, help_text="The day the team should reply or call next."
+    )
+    quote_status = models.CharField(
+        "Quote", max_length=10, choices=QuoteStatus.choices, default=QuoteStatus.NONE, db_index=True
+    )
+    value_range = models.CharField(
+        "Value range", max_length=10, choices=ValueRange.choices, blank=True, default="", db_index=True
+    )
+    first_reply_at = models.DateTimeField(
+        "First reply",
+        null=True,
+        blank=True,
+        help_text="Set once, at the first staff status change (the customer is emailed).",
     )
 
     class Meta:

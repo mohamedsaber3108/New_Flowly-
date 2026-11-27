@@ -53,9 +53,30 @@ def _set_status(modeladmin, request, queryset, status):
 
 @admin.register(Request)
 class RequestAdmin(UnfoldModelAdmin):
-    list_display = ["reference", "name", "organization", "kind", "audience", "status", "assigned_to", "created_at"]
-    list_filter = ["status", "kind", "audience", "language", "created_at"]
-    search_fields = ["reference", "name", "email", "organization"]
+    list_display = [
+        "reference",
+        "name",
+        "organization",
+        "kind",
+        "audience",
+        "status",
+        "quote_status",
+        "next_follow_up",
+        "assigned_to",
+        "created_at",
+    ]
+    list_filter = [
+        "status",
+        "quote_status",
+        "value_range",
+        "next_follow_up",
+        "utm_source",
+        "kind",
+        "audience",
+        "language",
+        "created_at",
+    ]
+    search_fields = ["reference", "name", "email", "organization", "utm_source", "utm_campaign"]
     ordering = ["-created_at"]
     readonly_fields = [
         "id",
@@ -67,6 +88,11 @@ class RequestAdmin(UnfoldModelAdmin):
         "created_at",
         "updated_at",
         "reviewed_at",
+        "first_reply_at",
+        "source_page",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
     ]
     exclude = ["details"]
     list_select_related = ["assigned_to"]
@@ -97,7 +123,7 @@ class RequestAdmin(UnfoldModelAdmin):
     def save_model(self, request, obj, form, change):
         """Status, note and assignee edits go through services.update_request, exactly like the /team console
         and the API: appointments follow the status, the customer is emailed, events record the admin."""
-        tracked = {"status", "internal_note", "assigned_to"}
+        tracked = {"status", "internal_note", "assigned_to", "quote_status", "value_range", "next_follow_up"}
         if not change or not tracked & set(form.changed_data):
             super().save_model(request, obj, form, change)
             return
@@ -106,13 +132,18 @@ class RequestAdmin(UnfoldModelAdmin):
         for f in tracked:  # save other edited fields first, without the tracked ones
             setattr(obj, f, getattr(stored, f))
         super().save_model(request, obj, form, change)
+        changed = set(form.changed_data)
         try:
             services.update_request(
                 obj,
-                status=wanted["status"] if "status" in form.changed_data else None,
-                internal_note=wanted["internal_note"] if "internal_note" in form.changed_data else None,
+                status=wanted["status"] if "status" in changed else None,
+                internal_note=wanted["internal_note"] if "internal_note" in changed else None,
                 assigned_to=wanted["assigned_to"],
-                assign="assigned_to" in form.changed_data,
+                assign="assigned_to" in changed,
+                quote_status=wanted["quote_status"] if "quote_status" in changed else None,
+                value_range=wanted["value_range"] if "value_range" in changed else None,
+                next_follow_up=wanted["next_follow_up"],
+                set_follow_up="next_follow_up" in changed,
                 actor=request.user,
             )
         except services.SlotTaken:
