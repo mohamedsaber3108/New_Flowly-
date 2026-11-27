@@ -127,7 +127,15 @@ def _system_prompt(language: str) -> str:
 
 _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 _NUMBER_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")  # a phone-like run of digits
-_URL_RE = re.compile(r"(?:https?://|www\.)[^\s)\]>\"'<]+", re.I)
+# Any address a visitor could follow: scheme links, "www.", protocol-relative "//host", and bare "host.tld[/path]".
+# shortcut: a missing space after a full stop ("end.Next") also looks like a host.tld and falls back to the guide;
+# that fails closed and is rare, so it is kept. Upgrade only if the guide shows up too often.
+_REST = r"[^\s)\]>\"'<]*"
+_URL_RE = re.compile(
+    rf"(?:https?://|www\.|(?<![\w:/])//){_REST}"
+    rf"|(?<![\w@./-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{{2,24}}\b(?:[:/]{_REST})?",
+    re.I,
+)
 HISTORY_TURNS = 4
 HISTORY_CHARS = 500
 
@@ -140,7 +148,13 @@ def _redact(text):
 def _history(history, message):
     """Only role and text of the last few turns, redacted. Never a name, email, link list or anything else the page
     keeps next to the messages. The current message itself is sent as the visitor typed it."""
-    items = [{"role": h["role"], "content": _redact(h["content"])} for h in history[-HISTORY_TURNS:]]
+    # Only the visitor's and the assistant's turns: a "system" (or any other) role from the page is never forwarded.
+    turns = [
+        h
+        for h in history
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str)
+    ]
+    items = [{"role": h["role"], "content": _redact(h["content"])} for h in turns[-HISTORY_TURNS:]]
     if items and items[-1]["content"] == _redact(message):
         items.pop()
     return items
@@ -159,6 +173,9 @@ def _site_hosts():
         host = urlparse(value or "").hostname
         if host:
             hosts.add(host.lower())
+    for host in settings.ALLOWED_HOSTS:  # explicit names only; "*" and ".suffix" wildcards allow nothing
+        if host and host != "*" and not host.startswith("."):
+            hosts.add(host.lower())
     return hosts
 
 
@@ -174,7 +191,7 @@ def unsafe_reason(reply, system):
             return "repeats the system prompt"
     allowed = _site_hosts()
     for url in _URL_RE.findall(reply):
-        host = urlparse(url if "://" in url else f"https://{url}").hostname or ""
+        host = urlparse(url if url.startswith("//") or "://" in url else f"//{url}").hostname or ""
         if host.lower() not in allowed:
             return "links outside the site"
     if _EMAIL_RE.search(reply):
@@ -268,7 +285,13 @@ def answer(message: str, language: str, history: list) -> dict:
     fallback = guide(message, arabic)
     name = provider()
     # Guide only: no provider, or the kill switch is off, or today's model calls are used up.
-    if not name or not settings.ASSISTANT_AI_ENABLED or not reserve_model_call():
+    if not name or not settings.ASSISTANT_AI_ENABLED:
+        return fallback
+    try:
+        if not reserve_model_call():
+            return fallback
+    except Exception:  # noqa: BLE001 - fail closed: if the cap cannot be counted, no model call is made
+        logger.warning("Assistant cost cap could not be checked; the guide answers", exc_info=True)
         return fallback
     system = _system_prompt(language)
     try:
