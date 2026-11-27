@@ -18,6 +18,22 @@ class AdminTokenScheme(OpenApiAuthenticationExtension):
         }
 
 
+class CookieJWTScheme(OpenApiAuthenticationExtension):
+    target_class = "apps.accounts.session_cookie.CookieJWTAuthentication"
+    name = "jwtAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": (
+                "Customers: bearer JWT. Team accounts: an httpOnly cookie set at sign-in; a request that changes data "
+                "also needs the X-CSRFToken header."
+            ),
+        }
+
+
 class TeamJWTScheme(OpenApiAuthenticationExtension):
     target_class = "apps.leads.auth.TeamJWTAuthentication"
     name = "teamJwtAuth"

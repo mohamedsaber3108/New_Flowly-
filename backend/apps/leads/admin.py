@@ -260,3 +260,6 @@ class AssistantMessageAdmin(UnfoldModelAdmin):
     @admin.display(description="Message")
     def short_message(self, obj):
         return obj.message[:80]
+
+
+from . import settings_admin  # noqa: E402,F401  (registers the site settings and blocked-day pages)

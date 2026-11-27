@@ -160,7 +160,8 @@ def update_request(
 
     Pipeline fields (FL-15): `quote_status` and `value_range` (None = leave as is; "" clears the value range) and
     `next_follow_up` (a date or None; only applied when `set_follow_up=True`, so None can mean "clear it").
-    `first_reply_at` is set once, at the first status change or note by the team.
+    `first_reply_at` is set once, at the first status change by the team (the change that emails the customer);
+    a note, an assignment or a quote change alone does not set it.
     """
     previous_status = req.status
     previous_note = req.internal_note
@@ -192,7 +193,7 @@ def update_request(
                 setattr(req, name, value)
                 fields.append(name)
             req.reviewed_at = timezone.now()
-            if req.first_reply_at is None and ((status is not None and status != previous_status) or note_changed):
+            if req.first_reply_at is None and status is not None and status != previous_status:
                 req.first_reply_at = req.reviewed_at
                 fields.append("first_reply_at")
             req.save(update_fields=fields)

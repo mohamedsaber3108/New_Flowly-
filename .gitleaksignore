@@ -1,4 +1,6 @@
 # Test-only Fernet key in commit 7df8743 (backend/config/settings/test.py). Never used outside tests; replaced by a key generated at test time in the commit that adds this file. History is not rewritten.
 7df87436f30dbdbcadcde8016d8111b8c5205dd0:backend/config/settings/test.py:generic-api-key:18
+# Test request key (a fixed UUID in a test), not a secret in commit 349f762. The literal is now generated at test time. History is not rewritten.
+349f7629a90a30922df312b5a9a75a1f06d23af8:backend/tests/integration/test_site_settings.py:generic-api-key:113
 # Test request key (a fixed UUID in a test), not a secret, in commit e717e7b. The literal is now generated at test time. History is not rewritten.
 e717e7b66016b1e938b08c3f8f56db2f582e225c:backend/tests/integration/test_pipeline.py:generic-api-key:101

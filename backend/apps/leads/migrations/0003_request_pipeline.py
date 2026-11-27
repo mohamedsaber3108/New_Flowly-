@@ -6,14 +6,14 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('leads', '0001_initial'),
+        ('leads', '0002_blockedday_sitesettings'),
     ]
 
     operations = [
         migrations.AddField(
             model_name='request',
             name='first_reply_at',
-            field=models.DateTimeField(blank=True, help_text='Set once, at the first staff status change or note.', null=True, verbose_name='First reply'),
+            field=models.DateTimeField(blank=True, help_text='Set once, at the first staff status change (the customer is emailed).', null=True, verbose_name='First reply'),
         ),
         migrations.AddField(
             model_name='request',

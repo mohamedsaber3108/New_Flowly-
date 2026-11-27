@@ -80,6 +80,21 @@ UNFOLD = {
                 ],
             },
             {
+                "title": "Settings",
+                "items": [
+                    {
+                        "title": "Site settings",
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:leads_sitesettings_changelist"),
+                    },
+                    {
+                        "title": "Blocked days",
+                        "icon": "event_busy",
+                        "link": reverse_lazy("admin:leads_blockedday_changelist"),
+                    },
+                ],
+            },
+            {
                 "title": "People",
                 "items": [
                     {"title": "Users", "icon": "person", "link": reverse_lazy("admin:accounts_user_changelist")},

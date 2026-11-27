@@ -11,10 +11,13 @@ from types import SimpleNamespace
 
 import pytest
 from django.contrib import admin as django_admin
+from django.core import mail
 from django.db import migrations
 from django.test import Client
 from django.test import RequestFactory as DjangoRequestFactory
 from django.utils import timezone
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.audit.models import AuditEntry
 from apps.leads import pipeline, services
@@ -46,7 +49,8 @@ def post_request(api, payload):
 
 
 def test_the_leads_migration_only_adds_columns_that_old_rows_can_have():
-    migration = importlib.import_module("apps.leads.migrations.0002_request_pipeline")
+    migration = importlib.import_module("apps.leads.migrations.0003_request_pipeline")
+    assert migration.Migration.dependencies == [("leads", "0002_blockedday_sitesettings")]  # follows the settings PR
     assert migration.Migration.operations and all(
         isinstance(op, migrations.AddField) for op in migration.Migration.operations
     )
@@ -133,21 +137,23 @@ def test_pipeline_changes_write_an_event_and_an_audit_entry_with_before_and_afte
     assert AuditEntry.objects.filter(action="request.pipeline").count() == 2
 
 
-def test_first_reply_is_set_once_by_the_first_status_change_or_note_and_not_by_assigning_or_the_quote():
+def test_first_reply_is_set_once_by_the_first_status_change_only():
+    """Only a status change (the one that emails the customer) is a reply. A note, an assignment, a quote change or
+    the same status again is not."""
     owner = OwnerFactory()
     req = RequestFactory()
     services.update_request(req, assigned_to=owner, assign=True, actor=owner)
     services.update_request(req, quote_status="sent", actor=owner)
-    req.refresh_from_db()
-    assert req.first_reply_at is None  # assigning and a quote change are not a reply
+    services.update_request(req, internal_note="Called, will send the plan.", actor=owner)
     services.update_request(req, status=req.status, actor=owner)  # same status: not a change
     req.refresh_from_db()
     assert req.first_reply_at is None
-    services.update_request(req, internal_note="Called, will send the plan.", actor=owner)
+    mail.outbox.clear()
+    services.update_request(req, status="in_review", actor=owner)
     req.refresh_from_db()
     first = req.first_reply_at
-    assert first is not None
-    services.update_request(req, status="in_review", actor=owner)
+    assert first is not None and len(mail.outbox) == 1  # the reply is the status change that emailed the customer
+    services.update_request(req, status="proposal_sent", actor=owner)
     req.refresh_from_db()
     assert req.first_reply_at == first  # kept
 
@@ -294,6 +300,102 @@ def test_win_rate_per_source_leaves_undecided_quotes_out_and_names_blank_sources
     assert rows["direct"] == {"source": "direct", "total": 2, "won": 0, "lost": 1, "rate": 0}
     assert rows["partner"]["rate"] is None  # nothing decided yet: no rate, not 0
     assert [r["source"] for r in pipeline.win_rate_by_source()][0] == "newsletter"  # most requests first
+
+
+@pytest.mark.parametrize(
+    "typed, stored",
+    [
+        (" Newsletter ", "newsletter"),
+        ("google.ads-2026_q4", "google.ads-2026_q4"),
+        ("", ""),
+        ("<script>alert(1)</script>", "other"),
+        ("نشرة", "other"),
+        ("two words", "other"),
+        ("x" * 51, "other"),
+        ("x" * 50, "x" * 50),
+    ],
+)
+def test_the_utm_source_is_lower_cased_and_only_a_z_0_9_underscore_dot_dash_is_kept(api, payload, typed, stored):
+    created = post_request(api, {**payload, "date": None, "time": None, "utmSource": typed})
+    assert created.status_code == 201
+    assert Request.objects.get(reference=created.json()["reference"]).utm_source == stored
+
+
+def test_the_dashboard_lists_the_top_ten_sources_and_adds_the_rest_to_other():
+    for index in range(12):  # source-00 has the most requests, then source-01, and so on
+        for _ in range(12 - index):
+            make(utm=f"source-{index:02d}", quote="accepted" if index == 11 else "none")
+    make(utm="<b>bad</b>", quote="lost")  # stored text that is not allowed counts as "other"
+    rows = pipeline.win_rate_by_source()
+    assert [r["source"] for r in rows] == [f"source-{i:02d}" for i in range(10)] + ["other"]
+    other = rows[-1]  # source-10 (2) + source-11 (1) + the bad one (1)
+    assert (other["total"], other["won"], other["lost"], other["rate"]) == (4, 1, 1, 50)
+    assert sum(r["total"] for r in rows) == Request.objects.count()
+
+
+def test_the_counts_are_made_by_the_database_not_by_looping_over_every_request(django_assert_max_num_queries):
+    for index in range(30):
+        make(utm=f"s{index % 3}", quote=("none", "sent", "accepted", "lost")[index % 4])
+    with django_assert_max_num_queries(1):
+        stages = pipeline.quote_stage_counts()
+    with django_assert_max_num_queries(1):
+        rows = pipeline.win_rate_by_source()
+    assert sum(s["count"] for s in stages) == 30 and sum(r["total"] for r in rows) == 30
+
+
+# --- who can change the quote ---------------------------------------------------------------------------------------
+
+
+def bearer(user):
+    return {"HTTP_AUTHORIZATION": f"Bearer {AccessToken.for_user(user)}"}
+
+
+def test_a_viewer_cannot_change_the_quote_in_the_admin_or_through_the_team_api():
+    req = RequestFactory()
+    viewer = UserFactory(role="viewer", is_staff=True)
+    client = Client()
+    client.force_login(viewer)
+    change = f"/admin/leads/request/{req.pk}/change/"
+    posted = client.post(change, {"status": req.status, "quote_status": "accepted", "value_range": "gt_200k"})
+    assert posted.status_code == 403
+    api = APIClient()
+    sent = api.patch(
+        f"/api/v1/admin/requests/{req.reference}/",
+        {"status": "in_review", "quote_status": "accepted"},
+        format="json",
+        **bearer(viewer),
+    )
+    assert sent.status_code == 403
+    req.refresh_from_db()
+    assert req.quote_status == "none" and req.value_range == "" and req.status == "pending_review"
+    assert not AuditEntry.objects.filter(action="request.pipeline").exists()
+
+
+def test_the_team_api_has_no_way_to_set_the_quote_even_for_staff():
+    req = RequestFactory()
+    staff = UserFactory(role="staff", is_staff=True)
+    sent = APIClient().patch(
+        f"/api/v1/admin/requests/{req.reference}/",
+        {"status": "in_review", "quote_status": "accepted", "value_range": "gt_200k"},
+        format="json",
+        **bearer(staff),
+    )
+    assert sent.status_code == 200
+    req.refresh_from_db()
+    assert req.status == "in_review" and req.quote_status == "none" and req.value_range == ""
+
+
+def test_the_new_dashboard_table_has_column_headers_with_scope():
+    make(utm="newsletter")
+    html = login_client().get("/admin/").content.decode()
+    assert html.count('scope="col"') >= 5 and "<th>Source</th>" not in html
+
+
+def login_client():
+    root = UserFactory(is_staff=True, is_superuser=True)
+    client = Client()
+    client.force_login(root)
+    return client
 
 
 def test_the_dashboard_shows_the_numbers():

@@ -93,13 +93,13 @@
   <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
     <h2 class="font-semibold mb-3">Win rate by source</h2>
     {% if flowly_win_rates %}
-      <table class="fl-table"><thead><tr><th>Source</th><th>Requests</th><th>Won</th><th>Lost</th><th>Win rate</th></tr></thead><tbody>
+      <table class="fl-table"><thead><tr><th scope="col">Source</th><th scope="col">Requests</th><th scope="col">Won</th><th scope="col">Lost</th><th scope="col">Win rate</th></tr></thead><tbody>
       {% for r in flowly_win_rates %}
         <tr><td><bdi>{{ r.source }}</bdi></td><td>{{ r.total }}</td><td>{{ r.won }}</td><td>{{ r.lost }}</td>
           <td>{% if r.rate is None %}no decided quotes yet{% else %}{{ r.rate }}%{% endif %}</td></tr>
       {% endfor %}
       </tbody></table>
-      <p class="opacity-70 mt-2" style="font-size:12px">Win rate = accepted / (accepted + lost). Quotes not decided yet are left out. Source = UTM source, or "direct".</p>
+      <p class="opacity-70 mt-2" style="font-size:12px">Win rate = accepted / (accepted + lost). Quotes not decided yet are left out. Source = UTM source, or "direct". The 10 sources with the most requests are listed; all the rest are added up in "other".</p>
     {% else %}<p class="opacity-70">No requests yet.</p>{% endif %}
   </section>
 </div>
