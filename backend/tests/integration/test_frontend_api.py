@@ -363,6 +363,7 @@ def test_assistant_validation_and_origin(api):
 
 def test_assistant_uses_compatible_provider_when_configured(api, settings):
     settings.AI_API_URL, settings.AI_API_KEY, settings.AI_MODEL = "https://ai.example/v1/chat", "k", "m"
+    settings.ASSISTANT_AI_ENABLED = True  # FL-17: the kill switch is off by default
     fake = mock.Mock(status_code=200)
     fake.json.return_value = {"choices": [{"message": {"content": "Live AI answer"}}]}
     fake.raise_for_status.return_value = None
@@ -373,7 +374,8 @@ def test_assistant_uses_compatible_provider_when_configured(api, settings):
             "/api/assistant",
             {"message": "hello", "language": "en", "history": [{"role": "user", "content": "hello"}]},
         ).json()
-    assert body["mode"] == "ai" and body["reply"] == "Live AI answer" and len(body["links"]) == 3
+    assert body["mode"] == "ai" and body["source"] == "ai"
+    assert body["reply"] == "Live AI answer" and len(body["links"]) == 3
     sent = call.call_args.kwargs["json"]
     assert sent["model"] == "m" and sent["messages"][0]["role"] == "system"
     assert [m["role"] for m in sent["messages"]] == ["system", "user"]  # duplicated last turn removed
@@ -381,6 +383,7 @@ def test_assistant_uses_compatible_provider_when_configured(api, settings):
 
 def test_assistant_falls_back_when_provider_fails(api, settings):
     settings.AI_API_URL, settings.AI_API_KEY, settings.AI_MODEL = "https://ai.example/v1/chat", "k", "m"
+    settings.ASSISTANT_AI_ENABLED = True
     with mock.patch("apps.leads.assistant.requests.post", side_effect=RuntimeError("down")):
         body = post(api, "/api/assistant", {"message": "erp please", "language": "en"}).json()
     assert body["mode"] == "guide" and body["reply"].startswith("The AI connection is unavailable")

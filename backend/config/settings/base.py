@@ -220,6 +220,11 @@ ADMIN_TOKEN = config("ADMIN_TOKEN", default="")  # legacy /team bearer token (>=
 ALLOW_SHARED_ADMIN_TOKEN = config("ALLOW_SHARED_ADMIN_TOKEN", default=False, cast=bool)
 TEAM_NOTIFY_EMAIL = config("TEAM_NOTIFY_EMAIL", default="")
 ASSISTANT_LOG_ENABLED = config("ASSISTANT_LOG_ENABLED", default=False, cast=bool)
+# Kill switch: the assistant uses an AI model ONLY when this is True AND a provider is configured. Default off, so the
+# catalog guide answers (no provider cost, no model risk) until the owner switches it on (FL-17).
+ASSISTANT_AI_ENABLED = config("ASSISTANT_AI_ENABLED", default=False, cast=bool)
+# Most model calls per day (Africa/Cairo day) across the whole site. Over the limit, visitors get the guide.
+ASSISTANT_DAILY_LIMIT = config("ASSISTANT_DAILY_LIMIT", default=200, cast=int)
 AI_PROVIDER = config("AI_PROVIDER", default="")  # bedrock | compatible | dify | "" (guide only)
 AI_API_URL = config("AI_API_URL", default="")
 AI_API_KEY = config("AI_API_KEY", default="")
