@@ -1,4 +1,4 @@
-"""Team authentication: the legacy ADMIN_TOKEN bearer (used by the /team console) or a staff JWT."""
+"""Team authentication: a staff JWT, or the legacy shared ADMIN_TOKEN bearer when ALLOW_SHARED_ADMIN_TOKEN is True."""
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -30,6 +30,8 @@ class AdminTokenAuthentication(BaseAuthentication):
         return "Bearer"
 
     def authenticate(self, request):
+        if not settings.ALLOW_SHARED_ADMIN_TOKEN:
+            return None
         expected = settings.ADMIN_TOKEN or ""
         header = request.META.get("HTTP_AUTHORIZATION", "")
         if len(expected) < 32 or not header.startswith("Bearer "):
