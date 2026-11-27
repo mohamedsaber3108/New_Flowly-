@@ -86,7 +86,18 @@ def test_codes_addresses_and_references_stay_left_to_right_in_arabic():
     assert CONSOLE.count('dir="ltr"') >= 8  # email, password, code, token boxes; references and addresses in <bdi>
     assert '<pre dir="ltr">' in CONSOLE
     assert '<bdi dir="ltr">{selected.email}</bdi>' in CONSOLE
-    assert 'inputMode="numeric"' in CONSOLE
+    # the code box also takes recovery codes (letters and a dash), so a phone must be able to type them
+    code_box = CONSOLE.split('autoComplete="one-time-code"', 1)[1].split("/>", 1)[0]
+    assert 'inputMode="numeric"' not in CONSOLE
+    assert 'inputMode="text"' in CONSOLE.split('autoComplete="one-time-code"', 1)[0][-80:]
+    assert 'autoCapitalize="off"' in code_box and "spellCheck={false}" in code_box
+
+
+def test_request_kind_and_audience_are_shown_in_arabic():
+    assert "const kindAr:Record<string,string>={discovery:" in CONSOLE
+    assert "const audienceAr:Record<string,string>={business:" in CONSOLE
+    assert "{kl(selected.kind)} · {al(selected.audience)}" in CONSOLE and "{al(r.audience)}" in CONSOLE
+    assert "{selected.kind}" not in CONSOLE and "{r.audience}" not in CONSOLE  # no raw English word is left
 
 
 def test_the_server_messages_a_team_member_can_meet_are_translated_in_one_table():
