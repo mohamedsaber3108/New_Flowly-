@@ -239,6 +239,31 @@ def test_health_reports_whether_the_shared_key_is_allowed(api, settings):
     assert body["sharedAdminToken"] is False
     assert "ADMIN_TOKEN" not in str(body)
 
+    # With a real key set and the flag on: the response is only a boolean, never the key, a part of it or its length.
+    key = "flowly-secret-key-for-health-test-0123456789"
+    settings.ADMIN_TOKEN = key
+    raw = api.get("/api/health").content.decode()
+    assert api.get("/api/health").json()["sharedAdminToken"] is True
+    assert key not in raw and key[:8] not in raw
+    assert str(len(key)) not in raw
+
+
+def test_assigning_a_request_by_named_staff_records_that_actor(api, staff, settings):
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    assert settings.ALLOW_SHARED_ADMIN_TOKEN is False
+    assignee = StaffFactory()
+    req = make_request()
+    r = api.patch(
+        f"{V1}/admin/requests/{req.reference}/",
+        {"assigned_to": assignee.email},
+        format="json",
+        HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(staff).access_token}",
+    )
+    assert r.status_code == 200
+    event = RequestEvent.objects.get(request=req, event_type="assigned")
+    assert event.actor_id == staff.id  # the person who assigned, not the assignee
+
 
 def test_team_endpoints_reject_anonymous(api):
     assert api.get(f"{V1}/admin/requests/").status_code == 401
