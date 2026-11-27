@@ -8,16 +8,21 @@ tokens created before a moment (default: now), so a later run does not end sessi
 Only counts are printed and logged, never a token or an address.
 """
 
+import getpass
 import logging
+import os
+import socket
 from datetime import datetime
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from apps.accounts.session_cookie import STAFF_ROLES
+from apps.audit import service as audit
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +49,26 @@ class Command(BaseCommand):
         pending = OutstandingToken.objects.filter(user__in=team, created_at__lt=cutoff).filter(
             blacklistedtoken__isnull=True
         )
-        revoked = len(BlacklistedToken.objects.bulk_create([BlacklistedToken(token=t) for t in pending]))
-        message = f"revoke_staff_tokens: team accounts {team.count()}, refresh tokens revoked {revoked}"
+        accounts = team.count()
+        with transaction.atomic():  # no audit entry, no revocation
+            revoked = len(BlacklistedToken.objects.bulk_create([BlacklistedToken(token=t) for t in pending]))
+            audit.record(
+                audit.A.TOKENS_REVOKED,
+                target_type="tokens",
+                target_id="team",
+                # counts, the cut-off time and who ran it: never a token (the audit log also redacts any key
+                # that looks like one, so the count is called "revoked", not "tokens")
+                after={
+                    "team_accounts": accounts,
+                    "revoked": revoked,
+                    "created_before": cutoff.isoformat(),
+                    "os_user": getpass.getuser(),
+                    "sudo_user": os.environ.get("SUDO_USER", ""),
+                    "host": socket.gethostname(),
+                },
+                reason="Management command revoke_staff_tokens",
+                sensitive=True,
+            )
+        message = f"revoke_staff_tokens: team accounts {accounts}, refresh tokens revoked {revoked}"
         logger.info(message)
         self.stdout.write(message)

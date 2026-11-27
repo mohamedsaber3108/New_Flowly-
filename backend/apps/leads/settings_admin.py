@@ -12,11 +12,13 @@ import re
 
 from django import forms
 from django.contrib import admin
+from django.db import transaction
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 
+from apps.audit import service as audit
 from apps.core.adminlog import log_admin_event
 from apps.core.modules import registry
 
@@ -167,6 +169,15 @@ class SiteSettingsAdmin(UnfoldModelAdmin):
         changes = {f: [before[f], getattr(obj, f)] for f in form.fields if before[f] != getattr(obj, f)}
         if changes:
             log_admin_event("settings.changed", request.user, changes=changes)
+            # The audit log: only the fields that changed, before and after. No setting here is a secret. The admin
+            # saves inside a transaction, so if this entry cannot be written the change is rolled back.
+            audit.record_settings_change(
+                "site_settings",
+                {f: pair[0] for f, pair in changes.items()},
+                {f: pair[1] for f, pair in changes.items()},
+                actor=request.user,
+                reason="Changed on the admin settings page",
+            )
 
 
 @admin.register(BlockedDay)
@@ -195,7 +206,25 @@ class BlockedDayAdmin(UnfoldModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return can_change(request)
 
+    def _audit(self, request, date, before, after):
+        """An audit entry for a blocked day: the date, the reason (the team's own note, not a secret), before and
+        after. Fail closed: if it cannot be written, the change is not kept."""
+        audit.record(
+            audit.A.SETTINGS,
+            actor=request.user,
+            target_type="blocked_day",
+            target_id=date,
+            before=before,
+            after=after,
+            reason="Changed on the blocked days page",
+            sensitive=True,
+        )
+
     def save_model(self, request, obj, form, change):
+        before = None
+        if change:
+            stored = BlockedDay.objects.filter(pk=obj.pk).first()
+            before = {"date": stored.date.isoformat(), "reason": stored.reason} if stored else None
         super().save_model(request, obj, form, change)
         log_admin_event(
             "blocked_day.changed" if change else "blocked_day.added",
@@ -203,14 +232,20 @@ class BlockedDayAdmin(UnfoldModelAdmin):
             date=obj.date.isoformat(),
             reason=obj.reason,
         )
+        self._audit(request, obj.date.isoformat(), before, {"date": obj.date.isoformat(), "reason": obj.reason})
 
     def delete_model(self, request, obj):
-        date = obj.date.isoformat()
-        super().delete_model(request, obj)
+        date, reason = obj.date.isoformat(), obj.reason
+        with transaction.atomic():
+            self._audit(request, date, {"date": date, "reason": reason}, None)  # first: no entry, no delete
+            super().delete_model(request, obj)
         log_admin_event("blocked_day.removed", request.user, date=date)
 
     def delete_queryset(self, request, queryset):
-        dates = [d.isoformat() for d in queryset.values_list("date", flat=True)]
-        super().delete_queryset(request, queryset)
-        for date in dates:
+        removed = [(d.isoformat(), r) for d, r in queryset.values_list("date", "reason")]
+        with transaction.atomic():
+            for date, reason in removed:
+                self._audit(request, date, {"date": date, "reason": reason}, None)
+            super().delete_queryset(request, queryset)
+        for date, _ in removed:
             log_admin_event("blocked_day.removed", request.user, date=date)

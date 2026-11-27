@@ -29,7 +29,7 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
             self.message_user(request, "Only an owner can clear a sign-in lock.", level="error")
             return
         for user in queryset:
-            lockout.clear_email(user.email, by=f"{request.user.email} (admin action)")
+            lockout.clear_email(user.email, by=f"{request.user.email} (admin action)", actor=request.user)
         self.message_user(request, f"Sign-in lock cleared for {queryset.count()} user(s).")
 
     @admin.action(description="Reset two-step verification (the person sets it up again)")
@@ -39,7 +39,7 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
             self.message_user(request, "Only an owner can reset two-step verification.", level="error")
             return
         for user in queryset:
-            mfa_service.reset_device(user, by=f"{request.user.email} (admin action)")
+            mfa_service.reset_device(user, by=f"{request.user.email} (admin action)", actor=request.user)
         self.message_user(request, f"Two-step verification reset for {queryset.count()} user(s).")
 
     list_display = ["email", "full_name", "role", "status", "is_active", "is_deleted", "created_at"]
