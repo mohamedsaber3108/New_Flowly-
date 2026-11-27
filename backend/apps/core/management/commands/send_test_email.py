@@ -44,4 +44,8 @@ class Command(BaseCommand):
             raise CommandError(f"FAILED: {type(exc).__name__}: {mask_addresses_in(exc)}") from exc
         if not sent:
             raise CommandError("FAILED: the mail backend reported 0 messages sent.")
+        if mode == "console":
+            # The console backend "succeeds" without sending anything: do not report that as OK.
+            self.stdout.write(self.style.WARNING("console backend: not sent, check the log"))
+            return
         self.stdout.write(self.style.SUCCESS("OK: the mail server accepted the message. Now check the inbox and spam."))

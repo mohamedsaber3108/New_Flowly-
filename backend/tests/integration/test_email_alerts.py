@@ -123,20 +123,33 @@ def test_masking_helpers_never_return_a_full_address():
 # --- send_test_email -------------------------------------------------------------------------------------------------
 
 
-def test_send_test_email_reports_success_and_masks_the_address():
+def test_send_test_email_reports_ok_for_a_real_mail_server_and_masks_the_address(settings):
+    settings.EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     out = StringIO()
-    call_command("send_test_email", "--to", "owner.person@example.test", stdout=out)
+    with mock.patch("django.core.mail.EmailMultiAlternatives.send", return_value=1) as send:
+        call_command("send_test_email", "--to", "owner.person@example.test", stdout=out)
     text = out.getvalue()
-    assert "OK:" in text and "o***@example.test" in text and "owner.person" not in text
-    assert mail.outbox[-1].to == ["owner.person@example.test"] and "Flowly test email" in mail.outbox[-1].subject
+    assert "Mail mode: configured" in text and "OK:" in text and "not sent" not in text
+    assert "o***@example.test" in text and "owner.person" not in text
+    assert send.call_count == 1
 
 
-def test_send_test_email_says_when_mail_only_goes_to_the_console(settings):
-    settings.EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-    out = StringIO()
-    with mock.patch("django.core.mail.EmailMultiAlternatives.send", return_value=1):
-        call_command("send_test_email", "--to", "a@example.test", stdout=out)
-    assert "Mail mode: console" in out.getvalue() and "nothing is really sent" in out.getvalue()
+def test_send_test_email_in_console_mode_does_not_say_ok(settings):
+    """The console and in-memory backends accept a message without sending it: that must not read as success."""
+    for backend in ("django.core.mail.backends.console.EmailBackend", "django.core.mail.backends.locmem.EmailBackend"):
+        settings.EMAIL_BACKEND = backend
+        out = StringIO()
+        call_command("send_test_email", "--to", "owner.person@example.test", stdout=out)
+        text = out.getvalue()
+        assert "Mail mode: console" in text and "console backend: not sent, check the log" in text
+        assert "OK:" not in text and "owner.person" not in text
+
+
+def test_production_settings_give_up_on_a_silent_mail_server_after_10_seconds():
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[2] / "config" / "settings" / "production.py").read_text()
+    assert 'EMAIL_TIMEOUT = config("EMAIL_TIMEOUT", default=10, cast=int)' in source
 
 
 def test_send_test_email_fails_loudly_without_printing_addresses_or_secrets(settings):
