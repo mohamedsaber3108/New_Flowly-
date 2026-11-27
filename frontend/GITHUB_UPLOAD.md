@@ -4,7 +4,7 @@ This archive is the full Flowly project after the latest updates.
 
 ## Included
 - React/Vinext website source in `app/`, `components/`, `lib/`, `public/`.
-- API and data definitions in `lib/api.ts`, `db/` and `drizzle/`.
+- API and data definitions in `lib/api.ts`. The old Cloudflare/D1 routes, `db/` and `drizzle/` now live in `legacy/` (not deployed).
 - Hosted Site configuration in `.openai/hosting.json`.
 - EC2 Node/SQLite source in `portable/` and a ready build in `ec2-dist/`.
 - Customer-readiness documentation in `docs/`.
