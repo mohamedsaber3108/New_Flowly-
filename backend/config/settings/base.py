@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.accounts",
     "apps.leads",
     "apps.security",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
@@ -57,6 +58,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.security.middleware.StaffSessionLimitsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "apps.audit.context.AuditContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -101,7 +103,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
-PASSWORD_HASHERS = ["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+# Both hashers are always listed, so an Argon2 hash and a PBKDF2 hash both verify. The FIRST one is used for new
+# hashes and decides what gets upgraded at login:
+#   PASSWORD_HASH_ARGON2=False (default): PBKDF2 first. New hashes stay PBKDF2, nothing is upgraded. Safe to roll back.
+#   PASSWORD_HASH_ARGON2=True: Argon2 first. Each user's hash is upgraded to Argon2 the next time they sign in.
+# Once it has been True, roll back only to a commit that still lists Argon2 (see the FL-20 runbook in the PR).
+PASSWORD_HASH_ARGON2 = config("PASSWORD_HASH_ARGON2", default=False, cast=bool)
+
+
+def build_password_hashers(argon2_first):
+    argon2 = "django.contrib.auth.hashers.Argon2PasswordHasher"
+    pbkdf2 = "django.contrib.auth.hashers.PBKDF2PasswordHasher"
+    return [argon2, pbkdf2] if argon2_first else [pbkdf2, argon2]
+
+
+PASSWORD_HASHERS = build_password_hashers(PASSWORD_HASH_ARGON2)
 
 # Email verification is enforced at login by the API. Set to False only for demos.
 # Defaults to ON only when SMTP credentials are configured: without a mail server nobody could ever verify,
@@ -218,6 +234,8 @@ CACHES = {
 
 # --- Flowly business settings ----------------------------------------------
 ADMIN_TOKEN = config("ADMIN_TOKEN", default="")  # legacy /team bearer token (>= 32 chars)
+# Where `manage.py export_audit_log` writes its daily JSONL + SHA-256 files (a folder on the app server).
+AUDIT_EXPORT_DIR = config("AUDIT_EXPORT_DIR", default=str(BASE_DIR / "audit_exports"))
 # The shared ADMIN_TOKEN is ignored (401) unless this is True. Default off: team members sign in with a named account.
 ALLOW_SHARED_ADMIN_TOKEN = config("ALLOW_SHARED_ADMIN_TOKEN", default=False, cast=bool)
 

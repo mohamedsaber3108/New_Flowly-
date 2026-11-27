@@ -17,6 +17,7 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.audit import service as audit
 from apps.core.exceptions import legacy_exception_handler
 from apps.core.permissions import READ_ROLES, TEAM_ROLES, has_role
 
@@ -208,6 +209,7 @@ class TeamLegacyView(LegacyAPIView):
         if not request.user or not request.user.is_authenticated:
             return self.error(401, "Unauthorized")
         if not has_role(request.user, roles):
+            audit.record_denied(request, self, 403)
             return self.error(403, "Forbidden")
         return None
 

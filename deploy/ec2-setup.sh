@@ -141,12 +141,8 @@ run_manage collectstatic --noinput
 run_manage seed_demo
 
 log "React frontend build -> ${FRONTEND_DIR}"
-if [ -d "$APP_DIR/frontend/ec2-dist/public" ]; then
-  rsync -a --delete "$APP_DIR/frontend/ec2-dist/public/" "$FRONTEND_DIR/" 2>/dev/null \
-    || { rm -rf "${FRONTEND_DIR:?}"/*; cp -a "$APP_DIR/frontend/ec2-dist/public/." "$FRONTEND_DIR/"; }
-else
-  echo "WARNING: frontend/ec2-dist/public not found; copy your React build into ${FRONTEND_DIR}."
-fi
+APP_USER="$APP_USER" APP_DIR="$APP_DIR" bash "$APP_DIR/deploy/build-frontend.sh"  # installs Node 22 if missing; stops on failure
+APP_DIR="$APP_DIR" FRONTEND_DIR="$FRONTEND_DIR" bash "$APP_DIR/deploy/publish-frontend.sh"
 chmod -R a+rX "$FRONTEND_DIR" "$MEDIA_DIR" "$BACKEND_DIR/staticfiles"
 
 log "Gunicorn systemd service"
