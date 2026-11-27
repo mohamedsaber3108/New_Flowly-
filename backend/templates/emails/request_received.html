@@ -6,13 +6,13 @@
 <p>استلمنا طلبك في Flowly. رقم المرجع الخاص بك:</p>
 <p style="font-size:18px;font-weight:700">{{ req.reference }}</p>
 {% if appointment %}<p>الموعد المطلوب (مبدئي حتى يؤكده الفريق): {{ appointment.date|date:"Y-m-d" }} الساعة {{ appointment.time }} بتوقيت القاهرة.</p>{% endif %}
-<p>يمكنك متابعة حالة الطلب من صفحة <a href="{{ frontend_url }}/status" style="color:#7e22ce">متابعة الطلب</a> باستخدام رقم المرجع وبريدك الإلكتروني.</p>
+<p>يمكنك متابعة حالة الطلب من صفحة <a href="{{ frontend_url }}/status" style="color:#7e22ce">متابعة الطلب</a> باستخدام رقم المرجع وبريدك الإلكتروني.<br>{{ frontend_url }}/status</p>
 </div>
 {% else %}
 <p>Hi {{ req.name }},</p>
 <p>We received your request. Your reference is:</p>
 <p style="font-size:18px;font-weight:700">{{ req.reference }}</p>
 {% if appointment %}<p>Requested consultation (provisional until the team confirms): {{ appointment.date|date:"Y-m-d" }} at {{ appointment.time }} Cairo time.</p>{% endif %}
-<p>Track your request any time on the <a href="{{ frontend_url }}/status" style="color:#7e22ce">status page</a> with your reference and this email address.</p>
+<p>Track your request any time on the <a href="{{ frontend_url }}/status" style="color:#7e22ce">status page</a> with your reference and this email address.<br>{{ frontend_url }}/status</p>
 {% endif %}
 {% endblock %}
