@@ -40,6 +40,12 @@ else
   PREVIOUS="uploaded-tree"
   echo "No git repository in ${APP_DIR}: deploying the files already on disk (uploaded copy)."
 fi
+# Build the frontend from this commit first. At this point only the code on disk has changed (git checkout/pull).
+# The venv, the database, static files, the served frontend and the services are untouched, so a failed build
+# stops the deploy here. Prints the build log line (commit + sha256 of index.html) and appends it to .deploy/deploy.log.
+echo "==> build frontend from this commit"
+APP_USER="$APP_USER" APP_DIR="$APP_DIR" bash "$APP_DIR/deploy/build-frontend.sh"
+
 echo "==> pip install -r requirements/production.txt"
 as_app "$VENV/bin/pip" install --quiet -r "$BACKEND_DIR/requirements/production.txt"
 
@@ -48,13 +54,8 @@ manage migrate --noinput
 manage createcachetable
 manage collectstatic --noinput
 
-if [ -d "$APP_DIR/frontend/ec2-dist/public" ]; then
-  echo "==> publish React build -> ${FRONTEND_DIR}"
-  mkdir -p "$FRONTEND_DIR"
-  rm -rf "${FRONTEND_DIR:?}"/*
-  cp -a "$APP_DIR/frontend/ec2-dist/public/." "$FRONTEND_DIR/"
-  chmod -R a+rX "$FRONTEND_DIR"
-fi
+echo "==> publish React build -> ${FRONTEND_DIR}"
+APP_DIR="$APP_DIR" FRONTEND_DIR="$FRONTEND_DIR" bash "$APP_DIR/deploy/publish-frontend.sh"
 chmod -R a+rX "$BACKEND_DIR/staticfiles"
 
 echo "==> ensure nightly backup cron"

@@ -17,6 +17,8 @@ htmlcov/
 # Frontend tooling
 frontend/node_modules/
 frontend/dist/
+# Built on the server by deploy/build-frontend.sh (and in CI); never committed.
+frontend/ec2-dist/
 frontend/.next/
 frontend/.vinext/
 frontend/.wrangler/
