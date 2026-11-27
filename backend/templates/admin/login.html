@@ -7,6 +7,17 @@
 {% block extrastyle %}
     {{ block.super }}
     {{ form.media }}
+    {# The two notices below are in English and Arabic; the page shows the one that matches the site language. #}
+    <style>
+        html:not([data-flowly-lang="ar"]) .fl-ar, html[data-flowly-lang="ar"] .fl-en { display: none; }
+    </style>
+    <script>
+        (function () {
+            try {
+                if (localStorage.getItem('flowly-language') === 'ar') document.documentElement.setAttribute('data-flowly-lang', 'ar');
+            } catch (e) {}
+        })();
+    </script>
 {% endblock %}
 
 {% block title %}
@@ -19,7 +30,10 @@
     {% include "unfold/helpers/messages.html" %}
 
     {% if request.GET.expired %}
-        <p role="status" class="mb-6">Your session ended after a period of inactivity or after 8 hours. Please sign in again.</p>
+        <p role="status" class="mb-6">
+            <span class="fl-en" lang="en">Your session ended after a period of inactivity or after 8 hours. Please sign in again.</span>
+            <span class="fl-ar" lang="ar" dir="rtl">انتهت جلستك بسبب عدم النشاط لفترة أو بعد ٨ ساعات. سجّل الدخول من جديد.</span>
+        </p>
     {% endif %}
 
     {% if form.errors or form.non_field_errors %}
@@ -64,7 +78,10 @@
                 {% endcomponent %}
             {% endif %}
         </div>
-        <p class="mt-4"><a href="/account/mfa/enroll/">Set up two-step verification</a></p>
+        <p class="mt-4">
+            <a class="fl-en" lang="en" href="/account/mfa/enroll/">Set up two-step verification</a>
+            <a class="fl-ar" lang="ar" dir="rtl" href="/account/mfa/enroll/">فعّل التحقق بخطوتين</a>
+        </p>
     </form>
 
     {% block login_after %}{% endblock %}
