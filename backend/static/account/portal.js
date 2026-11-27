@@ -52,7 +52,8 @@
     'Password changed.': 'تم تغيير كلمة المرور.', 'Invalid email or password.': 'البريد أو كلمة المرور غير صحيحة.',
     'This account is disabled.': 'هذا الحساب معطّل.', 'Verify your email address before signing in.': 'أكّد بريدك الإلكتروني قبل تسجيل الدخول.',
     'Validation failed.': 'راجع البيانات المدخلة.', 'Too many requests. Please try again later.': 'محاولات كثيرة. حاول لاحقًا.',
-    'Verification code (staff accounts only)': 'رمز التحقق (لحسابات الفريق فقط)',
+    'Verification code': 'رمز التحقق',
+    'Team account? Set up two-step verification': 'حساب فريق؟ فعّل التحقق بخطوتين',
     'Enter the verification code from your authenticator app, or a recovery code.': 'أدخل رمز التحقق من تطبيق المصادقة، أو أحد رموز الاسترداد.',
     'That verification code is not valid.': 'رمز التحقق غير صحيح.',
     'Too many failed sign-in attempts. Try again in 15 minutes.': 'محاولات دخول فاشلة كثيرة. حاول بعد ١٥ دقيقة.',
@@ -214,14 +215,21 @@
   }
 
   function viewLogin() {
+    // The code field stays hidden (and is not sent) until the server answers that this account needs a code.
+    var codeInput = h('input', { id: 'code', name: 'code', type: 'text', dir: 'ltr', inputmode: 'numeric',
+      autocomplete: 'one-time-code', disabled: 'disabled' });
+    var codeBox = h('div', { hidden: 'hidden' }, h('label', { for: 'code' }, t('Verification code')), codeInput);
+    function showCode() { codeBox.hidden = false; codeInput.disabled = false; codeInput.focus(); }
     var f = form([field('email', 'Email', 'email', { autocomplete: 'email', required: 'required' }),
       field('password', 'Password', 'password', { autocomplete: 'current-password', required: 'required' }),
-      field('code', 'Verification code (staff accounts only)', 'text', { autocomplete: 'one-time-code' })],
+      codeBox],
       function (d) {
         return api('/auth/login/', { method: 'POST', body: d, anon: true }).then(function (j) {
           store.set(j.data.access, j.data.refresh); me = j.data.user; location.hash = '#dashboard';
         }).catch(function (err) {
-          if (err.errors && err.errors.code === 'email_not_verified') {
+          var code = err.errors && err.errors.code;
+          if (code === 'mfa_required' || code === 'mfa_invalid') showCode();
+          if (code === 'email_not_verified') {
             api('/auth/resend-verification/', { method: 'POST', body: { email: d.email }, anon: true }).catch(function () {});
             err.message += ' ' + t('We sent a new verification link.');
           }
@@ -229,7 +237,8 @@
         });
       }, 'Sign in');
     render(h('section', { class: 'card narrow' }, h('h1', {}, t('Sign in')), banner(), f, googleButton(),
-      h('p', { class: 'links' }, h('a', { class: 'link', href: '#forgot' }, t('Forgot your password?')), ' · ', h('a', { class: 'link', href: '#register' }, t('Create an account')))));
+      h('p', { class: 'links' }, h('a', { class: 'link', href: '#forgot' }, t('Forgot your password?')), ' · ', h('a', { class: 'link', href: '#register' }, t('Create an account'))),
+      h('p', { class: 'links' }, h('a', { class: 'link', href: '/account/mfa/enroll/' }, t('Team account? Set up two-step verification')))));
   }
 
   function viewRegister() {

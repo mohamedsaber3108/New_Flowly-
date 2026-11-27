@@ -2,7 +2,9 @@
 
 Only staff sessions are touched. Customers and the team console use JWT, not this session. When the limit is
 reached the session is ended and the person is sent to the admin sign-in page with ?expired=1.
-Later UI task: a visible warning a minute before the idle limit (the text below is what the page should say).
+The admin pages show a notice 5 minutes before the idle limit, with a "Stay signed in" button
+(static/security/admin-idle.js, added through UNFOLD["SCRIPTS"] in config/unfold.py). The portal and /team use JWT
+and have no idle sign-out, so they need no notice.
 """
 
 import time

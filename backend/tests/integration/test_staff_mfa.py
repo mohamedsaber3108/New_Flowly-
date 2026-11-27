@@ -212,8 +212,36 @@ def test_the_account_portal_page_and_script_carry_the_code_field():
     portal = Client().get("/account/")
     assert portal.status_code == 200 and b"portal.js" in portal.content
     script = (Path(__file__).resolve().parents[2] / "static" / "account" / "portal.js").read_text()
-    assert "field('code', 'Verification code (staff accounts only)'" in script
+    assert "id: 'code', name: 'code'" in script and "disabled: 'disabled'" in script
+    # UX: the field appears only after the server says a code is needed, and the enrol page is a real link.
+    assert "code === 'mfa_required'" in script and "function showCode()" in script
+    assert "href: '/account/mfa/enroll/'" in script
     assert "api('/auth/login/', { method: 'POST', body: d, anon: true })" in script
+
+
+def test_the_enrol_page_follows_the_portal_language_and_keeps_codes_left_to_right():
+    page = Client().get("/account/mfa/enroll/").content.decode()
+    assert "localStorage.getItem('flowly-language') === 'ar'" in page  # the same key the portal reads
+    assert 'lang="ar"' in page and 'lang="en"' in page and 'dir="rtl"' not in page  # both texts, dir set by script
+    assert 'href="/account/"' in page and "history.back" not in page and "javascript:" not in page
+
+
+def test_admin_pages_load_the_idle_warning_script_with_the_configured_limit(settings):
+    settings.ADMIN_SESSION_IDLE_SECONDS = 900
+    page = Client().get(f"/{settings.ADMIN_URL}login/").content.decode()
+    assert "security/admin-idle.js?idle=900&amp;ping=" in page or "security/admin-idle.js?idle=900&ping=" in page
+    script = (Path(__file__).resolve().parents[2] / "static" / "security" / "admin-idle.js").read_text()
+    assert "Stay signed in" in script and "role" in script and "login-form" in script
+
+
+def test_the_enrol_page_secret_and_recovery_codes_are_left_to_right():
+    staff = StaffFactory()
+    client = Client()
+    shown = client.post("/account/mfa/enroll/", {"step": "credentials", "email": staff.email, "password": PASSWORD})
+    assert '<bdi dir="ltr"><code id="secret" dir="ltr">' in shown.content.decode()
+    secret = shown.context["secret"]
+    done = client.post("/account/mfa/enroll/", {"step": "confirm", "code": service.totp_now(secret)})
+    assert '<pre id="codes" dir="ltr">' in done.content.decode()
 
 
 # --- entrance 4: Google sign-in ---------------------------------------------------------------------------------------
