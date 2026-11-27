@@ -131,8 +131,14 @@ _NUMBER_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")  # a phone-like run of digits
 # shortcut: a missing space after a full stop ("end.Next") also looks like a host.tld and falls back to the guide;
 # that fails closed and is rare, so it is kept. Upgrade only if the guide shows up too often.
 _REST = r"[^\s)\]>\"'<]*"
+# Also numeric hosts (FL-17b): a bracketed IPv6 address ("[::1]/x", "http://[2001:db8::1]:8080/") and a dotted IPv4
+# address ("1.2.3.4/x", "10.0.0.1:8080"). The bracket form comes first, because the scheme form below stops at "]".
+# shortcut: other spellings of an address (a single decimal or hex number, "127.1") are not caught; they are not
+# written in normal text, and a model reply that tries them is refused only if it also has a dotted address or name.
 _URL_RE = re.compile(
-    rf"(?:https?://|www\.|(?<![\w:/])//){_REST}"
+    rf"(?:(?:https?:)?//)?\[[0-9a-f:.]{{2,45}}\](?::\d{{1,5}})?(?:/{_REST})?"
+    rf"|(?:https?://|www\.|(?<![\w:/])//){_REST}"
+    rf"|(?<![\w@./-])(?:\d{{1,3}}\.){{3}}\d{{1,3}}(?![\w-])(?::\d{{1,5}})?(?:/{_REST})?"
     rf"|(?<![\w@./-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{{2,24}}\b(?:[:/]{_REST})?",
     re.I,
 )
@@ -191,7 +197,10 @@ def unsafe_reason(reply, system):
             return "repeats the system prompt"
     allowed = _site_hosts()
     for url in _URL_RE.findall(reply):
-        host = urlparse(url if url.startswith("//") or "://" in url else f"//{url}").hostname or ""
+        try:
+            host = urlparse(url if url.startswith("//") or "://" in url else f"//{url}").hostname or ""
+        except ValueError:  # an address that cannot be read (for example "http://[::1") is not one of ours
+            return "links outside the site"
         if host.lower() not in allowed:
             return "links outside the site"
     if _EMAIL_RE.search(reply):
