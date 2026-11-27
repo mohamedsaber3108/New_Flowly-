@@ -36,10 +36,18 @@ as_app git -C "$APP_DIR" checkout --detach "$TARGET"
 echo "==> reinstall dependencies and static files for that commit"
 as_app "$VENV/bin/pip" install --quiet -r "$BACKEND_DIR/requirements/production.txt"
 as_app bash -c "cd '$BACKEND_DIR' && DJANGO_SETTINGS_MODULE=config.settings.production '$VENV/bin/python' manage.py collectstatic --noinput"
-if [ -d "$APP_DIR/frontend/ec2-dist/public" ]; then
-  rm -rf "${FRONTEND_DIR:?}"/*
-  cp -a "$APP_DIR/frontend/ec2-dist/public/." "$FRONTEND_DIR/"
-  chmod -R a+rX "$FRONTEND_DIR"
+# Rebuild the frontend from the commit we just checked out (the ignored build folder may be from a newer commit).
+# Commits from before build-frontend.sh existed have no script: keep the files that are being served.
+if [ -f "$APP_DIR/deploy/build-frontend.sh" ]; then
+  if APP_USER="$APP_USER" APP_DIR="$APP_DIR" bash "$APP_DIR/deploy/build-frontend.sh"; then
+    rm -rf "${FRONTEND_DIR:?}"/*
+    cp -a "$APP_DIR/frontend/ec2-dist/public/." "$FRONTEND_DIR/"
+    chmod -R a+rX "$FRONTEND_DIR"
+  else
+    echo "WARNING: frontend rebuild failed. The frontend files currently served were NOT changed."
+  fi
+else
+  echo "NOTE: this commit has no build-frontend.sh. The frontend files currently served were NOT changed."
 fi
 chmod -R a+rX "$BACKEND_DIR/staticfiles"
 
