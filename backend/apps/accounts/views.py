@@ -7,7 +7,7 @@ from django.views.generic import TemplateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
 from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -196,6 +196,20 @@ class RefreshView(TokenRefreshView):
                 }
             )
             return session_cookie.set_staff_session(response, request, tokens)
+        # A refresh token sent in the body: customers only (FL-22). A team account's token would come back as new
+        # tokens in JSON, which is what the cookie sign-in avoids, so it is refused unless ALLOW_STAFF_BEARER is on.
+        raw = request.data.get("refresh") if isinstance(request.data, dict) else None
+        if raw and not settings.ALLOW_STAFF_BEARER:
+            from django.contrib.auth import get_user_model
+
+            try:  # only reads the token: nothing is consumed or rotated here
+                owner = get_user_model().objects.filter(pk=RefreshToken(raw).get("user_id")).first()
+            except TokenError:
+                owner = None  # an invalid token gets the normal 401 below
+            if owner is not None and session_cookie.is_staff_session(owner):
+                raise AuthenticationFailed(
+                    "Team accounts sign in with the browser session, not a token.", "staff_bearer_refused"
+                )
         return super().post(request, *args, **kwargs)
 
 

@@ -3,9 +3,12 @@
 Customers are unchanged: tokens in the body, bearer header.
 """
 
+from io import StringIO
 from pathlib import Path
 
 import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
@@ -165,6 +168,60 @@ def test_a_token_sent_in_the_body_still_refreshes_for_token_clients():
     refresh = sign_in(browser(), customer).json()["data"]["refresh"]
     response = APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh}, format="json")
     assert response.status_code == 200 and response.json()["data"]["access"]
+
+
+def test_a_team_refresh_token_in_the_body_is_refused_unless_the_setting_allows_it(settings):
+    staff = StaffFactory()
+    refresh = str(RefreshToken.for_user(staff))
+    settings.ALLOW_STAFF_BEARER = False
+    refused = APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh}, format="json")
+    assert refused.status_code == 401 and "browser session" in refused.content.decode()
+    assert "access" not in refused.content.decode()  # no new token in JSON
+    # nothing was consumed: the same token was not rotated or blacklisted by the refusal
+    settings.ALLOW_STAFF_BEARER = True
+    assert APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh}, format="json").status_code == 200
+
+
+def test_the_body_refusal_does_not_touch_customers_or_bad_tokens(settings):
+    settings.ALLOW_STAFF_BEARER = False
+    refresh = str(RefreshToken.for_user(UserFactory()))
+    assert APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh}, format="json").status_code == 200
+    bad = APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": "garbage"}, format="json")
+    assert bad.status_code == 401 and "browser session" not in bad.content.decode()
+
+
+# --- old tokens after the deploy -----------------------------------------------------------------------------------
+
+
+def run_revoke(*args):
+    out = StringIO()
+    call_command("revoke_staff_tokens", *args, stdout=out)
+    return out.getvalue()
+
+
+def test_revoke_staff_tokens_blacklists_team_tokens_only_and_can_run_again():
+    staff, owner, viewer, customer = StaffFactory(), OwnerFactory(), UserFactory(role="viewer"), UserFactory()
+    old = {u: [str(RefreshToken.for_user(u)), str(RefreshToken.for_user(u))] for u in (staff, owner, viewer, customer)}
+    first = run_revoke()
+    assert "refresh tokens revoked 6" in first and "team accounts 3" in first
+    for user in (staff, owner, viewer):
+        for token in old[user]:
+            assert APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": token}, format="json").status_code == 401
+    assert (
+        APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": old[customer][0]}, format="json").status_code == 200
+    )
+    assert "refresh tokens revoked 0" in run_revoke()  # run again: nothing left to do, nothing breaks
+    assert not any(token in first for tokens in old.values() for token in tokens)  # counts only
+
+
+def test_revoke_staff_tokens_before_leaves_newer_sessions_alone():
+    staff = StaffFactory()
+    client = browser()
+    sign_in(client, staff)  # a cookie session started after the deploy
+    assert "refresh tokens revoked 0" in run_revoke("--before", "2020-01-01T00:00:00+00:00")
+    assert client.post(f"{V1}/auth/token/refresh/", {}, format="json", **csrf_header(client)).status_code == 200
+    with pytest.raises(CommandError):
+        run_revoke("--before", "yesterday")
 
 
 # --- sign out --------------------------------------------------------------------------------------------------------
