@@ -51,4 +51,37 @@ GRANT SELECT, INSERT ON TABLE audit_entries TO :"app_role";
 REVOKE ALL ON SEQUENCE audit_entries_id_seq FROM PUBLIC;
 GRANT USAGE, SELECT ON SEQUENCE audit_entries_id_seq TO :"app_role";
 
+-- Assert the result before COMMIT. A bad run raises an error, ON_ERROR_STOP ends psql, and the transaction rolls
+-- back, so a half-applied state is never kept. (psql does not substitute :variables inside a $$ block, so the role
+-- name is passed through a transaction-local setting.)
+SELECT set_config('flowly.app_role', :'app_role', true);
+
+DO $$
+DECLARE
+  app_role text := current_setting('flowly.app_role');
+  table_owner text;
+BEGIN
+  SELECT pg_get_userbyid(c.relowner) INTO table_owner FROM pg_class c WHERE c.oid = 'audit_entries'::regclass;
+  IF table_owner IS DISTINCT FROM 'flowly_audit_owner' THEN
+    RAISE EXCEPTION 'audit_entries is owned by %, expected flowly_audit_owner', table_owner;
+  END IF;
+  IF has_table_privilege(app_role, 'audit_entries', 'UPDATE') THEN
+    RAISE EXCEPTION 'role % can still UPDATE audit_entries (is it a superuser or a member of another role?)', app_role;
+  END IF;
+  IF has_table_privilege(app_role, 'audit_entries', 'DELETE') THEN
+    RAISE EXCEPTION 'role % can still DELETE from audit_entries', app_role;
+  END IF;
+  IF has_table_privilege(app_role, 'audit_entries', 'TRUNCATE') THEN
+    RAISE EXCEPTION 'role % can still TRUNCATE audit_entries', app_role;
+  END IF;
+  IF pg_has_role(app_role, 'flowly_audit_owner', 'USAGE') THEN
+    RAISE EXCEPTION 'role % is a member of flowly_audit_owner and would act as the table owner', app_role;
+  END IF;
+  IF NOT (has_table_privilege(app_role, 'audit_entries', 'INSERT')
+          AND has_table_privilege(app_role, 'audit_entries', 'SELECT')) THEN
+    RAISE EXCEPTION 'role % lost INSERT or SELECT on audit_entries', app_role;
+  END IF;
+END
+$$;
+
 COMMIT;

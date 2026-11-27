@@ -61,6 +61,21 @@ jobs:
       - name: Migrations are up to date
         if: ${{ !cancelled() }}
         run: python manage.py makemigrations --check --dry-run
+      - name: Migrate the scratch database
+        if: ${{ !cancelled() }}
+        run: python manage.py migrate --noinput
+      - name: Audit table is insert-only for the app role (deploy/sql/audit_grants.sql)
+        # The Postgres service user "flowly" is a superuser here and plays "the postgres user" of the server.
+        # The script creates a throwaway LOGIN role as the app role, runs the grants file twice, then checks that
+        # INSERT/SELECT work and UPDATE/DELETE/TRUNCATE/ALTER/DROP/GRANT are refused. Any wrong result fails the job.
+        if: ${{ !cancelled() }}
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: flowly
+          PGPASSWORD: flowly-ci-only
+          PGDATABASE: flowly
+        run: bash ../deploy/sql/check_audit_grants.sh
       - name: pytest
         if: ${{ !cancelled() }}
         run: pytest
