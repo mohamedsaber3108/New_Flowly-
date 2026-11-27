@@ -7,6 +7,8 @@ from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.decorators import action
 
+from apps.audit import service as audit
+
 from . import services
 from .models import Appointment, AssistantMessage, Request, RequestEvent
 
@@ -121,6 +123,16 @@ class RequestAdmin(UnfoldModelAdmin):
 
     @action(description="Export selected as CSV")
     def export_csv(self, request, queryset):
+        # Fail closed: the audit entry is written first. If it cannot be written, no data leaves.
+        audit.record(
+            audit.A.EXPORT_REQUESTS,
+            actor=request.user,
+            target_type="request",
+            target_id="bulk",
+            after={"count": queryset.count(), "filename": "Flowly-requests.csv"},
+            reason="Export from Django admin",
+            sensitive=True,
+        )
         response = HttpResponse(content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = 'attachment; filename="Flowly-requests.csv"'
         response.write("\ufeff")

@@ -1,8 +1,10 @@
 """Delete browser-test data created by e2e/run.mjs (addresses matching e2e-*@example.test only)."""
 
 from django.core.management.base import BaseCommand
+from django.db import transaction
 
 from apps.accounts.models import User
+from apps.audit import service as audit
 from apps.leads.models import Request
 
 
@@ -21,6 +23,15 @@ class Command(BaseCommand):
             return
         # Appointments and events cascade with their request. These are synthetic test accounts, so they
         # are hard-deleted here; real users are only ever soft-deleted.
-        requests.delete()
-        users.delete()
+        with transaction.atomic():  # fail closed: one audit entry per hard-deleted user, or nothing is deleted
+            for user in users:
+                audit.record(
+                    audit.A.USER_DELETE,
+                    target=user,
+                    before={"role": user.role, "is_deleted": user.is_deleted},
+                    reason="purge_e2e: hard delete of a synthetic e2e test account",
+                    sensitive=True,
+                )
+            requests.delete()
+            users.delete()
         self.stdout.write(self.style.SUCCESS("Deleted."))

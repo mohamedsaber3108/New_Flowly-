@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.leads",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
@@ -55,6 +56,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "apps.audit.context.AuditContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -99,7 +101,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
-PASSWORD_HASHERS = ["django.contrib.auth.hashers.PBKDF2PasswordHasher"]
+# Both hashers are always listed, so an Argon2 hash and a PBKDF2 hash both verify. The FIRST one is used for new
+# hashes and decides what gets upgraded at login:
+#   PASSWORD_HASH_ARGON2=False (default): PBKDF2 first. New hashes stay PBKDF2, nothing is upgraded. Safe to roll back.
+#   PASSWORD_HASH_ARGON2=True: Argon2 first. Each user's hash is upgraded to Argon2 the next time they sign in.
+# Once it has been True, roll back only to a commit that still lists Argon2 (see the FL-20 runbook in the PR).
+PASSWORD_HASH_ARGON2 = config("PASSWORD_HASH_ARGON2", default=False, cast=bool)
+
+
+def build_password_hashers(argon2_first):
+    argon2 = "django.contrib.auth.hashers.Argon2PasswordHasher"
+    pbkdf2 = "django.contrib.auth.hashers.PBKDF2PasswordHasher"
+    return [argon2, pbkdf2] if argon2_first else [pbkdf2, argon2]
+
+
+PASSWORD_HASHERS = build_password_hashers(PASSWORD_HASH_ARGON2)
 
 # Email verification is enforced at login by the API. Set to False only for demos.
 # Defaults to ON only when SMTP credentials are configured: without a mail server nobody could ever verify,
@@ -211,15 +227,27 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "flowly_cache_table",
+        # Django's default is 300 entries. When the table is full it deletes the lowest KEYS first (not the oldest),
+        # and every visitor's throttle key adds a row, so counters such as "assistant:model-calls:<day>" and the
+        # sign-in lock counters could be thrown away early and a cap would reset. 50000 rows is a few MB; when it is
+        # ever full, only 1 row in 10 is culled.
+        "OPTIONS": {"MAX_ENTRIES": 50000, "CULL_FREQUENCY": 10},
     }
 }
 
 # --- Flowly business settings ----------------------------------------------
 ADMIN_TOKEN = config("ADMIN_TOKEN", default="")  # legacy /team bearer token (>= 32 chars)
+# Where `manage.py export_audit_log` writes its daily JSONL + SHA-256 files (a folder on the app server).
+AUDIT_EXPORT_DIR = config("AUDIT_EXPORT_DIR", default=str(BASE_DIR / "audit_exports"))
 # The shared ADMIN_TOKEN is ignored (401) unless this is True. Default off: team members sign in with a named account.
 ALLOW_SHARED_ADMIN_TOKEN = config("ALLOW_SHARED_ADMIN_TOKEN", default=False, cast=bool)
 TEAM_NOTIFY_EMAIL = config("TEAM_NOTIFY_EMAIL", default="")
 ASSISTANT_LOG_ENABLED = config("ASSISTANT_LOG_ENABLED", default=False, cast=bool)
+# Kill switch: the assistant uses an AI model ONLY when this is True AND a provider is configured. Default off, so the
+# catalog guide answers (no provider cost, no model risk) until the owner switches it on (FL-17).
+ASSISTANT_AI_ENABLED = config("ASSISTANT_AI_ENABLED", default=False, cast=bool)
+# Most model calls per day (Africa/Cairo day) across the whole site. Over the limit, visitors get the guide.
+ASSISTANT_DAILY_LIMIT = config("ASSISTANT_DAILY_LIMIT", default=200, cast=int)
 AI_PROVIDER = config("AI_PROVIDER", default="")  # bedrock | compatible | dify | "" (guide only)
 AI_API_URL = config("AI_API_URL", default="")
 AI_API_KEY = config("AI_API_KEY", default="")

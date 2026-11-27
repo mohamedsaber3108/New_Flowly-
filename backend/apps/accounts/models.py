@@ -78,12 +78,29 @@ class User(AbstractUser):
     def is_team(self):
         return self.is_superuser or self.role in (self.Role.OWNER, self.Role.STAFF, self.Role.VIEWER)
 
-    def soft_delete(self):
-        """Never hard-delete: disable login, keep the row for audit and request history."""
-        self.is_deleted = True
-        self.is_active = False
-        self.deleted_at = timezone.now()
-        self.save(update_fields=["is_deleted", "is_active", "deleted_at", "updated_at"])
+    def soft_delete(self, actor=None, reason="Account deleted"):
+        """Never hard-delete: disable login, keep the row for audit and request history.
+
+        Fail closed: the audit entry is written in the same transaction, so no audit means no deletion.
+        `actor` is the person who asked (the user themselves for self-service deletion, if not given)."""
+        from django.db import transaction
+
+        from apps.audit import service as audit
+
+        with transaction.atomic():
+            audit.record(
+                audit.A.USER_DELETE,
+                actor=actor or self,
+                target=self,
+                before={"is_deleted": False, "is_active": self.is_active, "role": self.role},
+                after={"is_deleted": True, "is_active": False},
+                reason=reason,
+                sensitive=True,
+            )
+            self.is_deleted = True
+            self.is_active = False
+            self.deleted_at = timezone.now()
+            self.save(update_fields=["is_deleted", "is_active", "deleted_at", "updated_at"])
 
 
 # Module-level alias used by drf-spectacular ENUM_NAME_OVERRIDES.
