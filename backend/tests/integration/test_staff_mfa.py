@@ -606,6 +606,25 @@ def test_break_glass_command_resets_one_account_and_logs_it(caplog):
     assert service.start_enrollment(owner)  # can enrol again
 
 
+def test_the_enrolled_list_in_the_admin_is_read_only_and_never_shows_the_secret():
+    staff = StaffFactory()
+    secret, _ = enrol(staff)
+    pending = StaffFactory()
+    service.start_enrollment(pending)
+    root = User.objects.create_superuser(email="root@example.test", password=PASSWORD)
+    client = Client()
+    client.force_login(root)
+    listing = client.get("/admin/security/mfadevice/")
+    assert listing.status_code == 200 and staff.email.encode() in listing.content
+    assert secret.encode() not in listing.content
+    device = MfaDevice.objects.get(user=staff)
+    assert client.get(f"/admin/security/mfadevice/{device.pk}/change/").status_code == 200
+    assert secret.encode() not in client.get(f"/admin/security/mfadevice/{device.pk}/change/").content
+    assert client.get("/admin/security/mfadevice/add/").status_code == 403
+    assert client.post(f"/admin/security/mfadevice/{device.pk}/delete/", {"post": "yes"}).status_code == 403
+    assert MfaDevice.objects.filter(pk=device.pk).exists()
+
+
 def test_break_glass_command_refuses_unknown_and_customer_accounts():
     with pytest.raises(CommandError):
         call_command("reset_staff_mfa", "--email", "nobody@example.test")
