@@ -66,6 +66,22 @@ def test_avatar_upload_and_replace(auth_client, user):
     assert user.avatar.name != first
 
 
+@pytest.mark.parametrize("fmt, name, ctype", [("PNG", "a.png", "image/png"), ("JPEG", "a.jpg", "image/jpeg")])
+def test_pillow_really_opens_and_resizes_the_uploaded_avatar(auth_client, user, fmt, name, ctype):
+    """Runs Pillow itself (open, resize, re-save) on the stored file, so a broken Pillow major bump fails here."""
+    r = auth_client.post(f"{ME}avatar/", {"avatar": image_file(name, fmt, ctype, size=(32, 16))}, format="multipart")
+    assert r.status_code == 200
+    user.refresh_from_db()
+    with user.avatar.open("rb") as stored:
+        with Image.open(stored) as img:
+            assert img.format == fmt and img.size == (32, 16)
+            small = img.convert("RGB").resize((8, 4))
+    assert small.size == (8, 4)
+    out = io.BytesIO()
+    small.save(out, "PNG")
+    assert Image.open(io.BytesIO(out.getvalue())).size == (8, 4)
+
+
 def test_avatar_rejects_non_image_and_oversize(auth_client, settings):
     bad = SimpleUploadedFile("evil.png", b"not really an image", content_type="image/png")
     assert auth_client.post(f"{ME}avatar/", {"avatar": bad}, format="multipart").status_code == 400

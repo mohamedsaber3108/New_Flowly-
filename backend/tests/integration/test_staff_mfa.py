@@ -489,6 +489,18 @@ def test_the_admin_login_page_says_why_the_session_ended():
     assert b'name="otp"' in response.content  # the code field is on the page
 
 
+def test_a_totp_secret_round_trips_through_fernet_on_the_installed_cryptography():
+    """Runs real Fernet encrypt and decrypt (cryptography major bump check); the stored token is not the secret."""
+    import cryptography
+
+    secret = service.new_secret()
+    token = service.encrypt_secret(secret)
+    assert token != secret and secret not in token
+    assert service.decrypt_secret(token) == secret
+    assert service.encrypt_secret(secret) != token  # Fernet adds a fresh IV and timestamp each time
+    assert int(cryptography.__version__.split(".")[0]) >= 50
+
+
 def test_a_secret_that_cannot_be_decrypted_is_a_configuration_error_not_a_pass():
     with pytest.raises(ImproperlyConfigured):
         service.decrypt_secret("not-a-token")
