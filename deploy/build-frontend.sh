@@ -26,9 +26,16 @@ as_app() { sudo -H -u "$APP_USER" env CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 
 
 [ -f "$FRONTEND_SRC/package.json" ] || fail "no frontend/package.json in ${APP_DIR}."
 
-node_major() { node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0; }
+# frontend/package.json requires node >=22.13.0: compare the full version, not only the major.
+NODE_MIN="22.13.0"
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local have
+  have="$(node -p 'process.versions.node' 2>/dev/null)" || return 1
+  [ "$(printf '%s\n%s\n' "$NODE_MIN" "$have" | sort -V | head -n1)" = "$NODE_MIN" ]
+}
 
-if ! command -v node >/dev/null 2>&1 || [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
+if ! node_ok; then
   echo "==> install Node ${NODE_MAJOR} (NodeSource apt repository)"
   command -v apt-get >/dev/null 2>&1 || fail "Node ${NODE_MAJOR} is missing and this is not an apt system. Install Node ${NODE_MAJOR} and run again."
   export DEBIAN_FRONTEND=noninteractive
@@ -40,7 +47,7 @@ if ! command -v node >/dev/null 2>&1 || [ "$(node_major)" -lt "$NODE_MAJOR" ]; t
   apt-get update -y
   apt-get install -y nodejs
 fi
-[ "$(node_major)" -ge "$NODE_MAJOR" ] || fail "Node $(node -v 2>/dev/null || echo missing) found, Node ${NODE_MAJOR} or newer is required."
+node_ok || fail "Node $(node -v 2>/dev/null || echo missing) found, Node ${NODE_MIN} or newer is required."
 
 # pnpm comes from Corepack (bundled with Node 22); frontend/package.json pins the exact version.
 command -v corepack >/dev/null 2>&1 || fail "corepack is missing. Install it with: npm install -g corepack"
