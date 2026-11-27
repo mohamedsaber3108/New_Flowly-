@@ -15,7 +15,16 @@ CAIRO = ZoneInfo("Africa/Cairo")
 class AuditEntryAdmin(UnfoldModelAdmin):
     """Read-only for everyone, superusers included. The table itself is insert-only (see models.py)."""
 
-    list_display = ["time_cairo", "actor_label", "actor_role", "action", "target_type", "target_id", "result", "ip"]
+    list_display = [
+        "time_cairo",
+        "actor_bdi",
+        "actor_role",
+        "action",
+        "target_type",
+        "target_id_bdi",
+        "result",
+        "ip_bdi",
+    ]
     list_filter = [
         ("actor_label", FieldTextFilter),
         "action",
@@ -31,16 +40,16 @@ class AuditEntryAdmin(UnfoldModelAdmin):
         "time_cairo",
         "time",
         "actor_id",
-        "actor_label",
+        "actor_bdi",
         "actor_role",
         "action",
         "target_type",
-        "target_id",
+        "target_id_bdi",
         "before_pretty",
         "after_pretty",
         "reason",
         "result",
-        "ip",
+        "ip_bdi",
         "user_agent",
         "request_id",
     ]
@@ -63,9 +72,24 @@ class AuditEntryAdmin(UnfoldModelAdmin):
     def _pretty(value):
         if value is None:
             return "-"
+        # Always left-to-right and scrollable, so Arabic pages do not flip or cut the JSON.
         return format_html(
-            "<pre style='white-space:pre-wrap'>{}</pre>", json.dumps(value, indent=2, ensure_ascii=False)
+            "<pre dir='ltr' style='overflow-x:auto;text-align:left'>{}</pre>",
+            json.dumps(value, indent=2, ensure_ascii=False),
         )
+
+    # Values that can start with Latin text or digits sit inside <bdi>, so they keep their order on Arabic pages.
+    @admin.display(description="Actor / المنفذ", ordering="actor_label")
+    def actor_bdi(self, obj):
+        return format_html("<bdi>{}</bdi>", obj.actor_label)
+
+    @admin.display(description="Target id / المعرّف", ordering="target_id")
+    def target_id_bdi(self, obj):
+        return format_html("<bdi>{}</bdi>", obj.target_id)
+
+    @admin.display(description="IP", ordering="ip")
+    def ip_bdi(self, obj):
+        return format_html("<bdi>{}</bdi>", obj.ip or "-")
 
     def has_add_permission(self, request):
         return False

@@ -422,6 +422,10 @@ def test_admin_viewer_is_read_only_and_shows_cairo_time(admin_client):
     assert client.get(f"/admin/audit/auditentry/{entry.pk}/delete/").status_code == 403
     detail = client.get(f"/admin/audit/auditentry/{entry.pk}/change/")
     assert detail.status_code == 200 and b"_save" not in detail.content
+    assert b"<bdi>viewer-test</bdi>" in detail.content and b"<bdi>viewer-test</bdi>" in listing.content
+    audit.record(A.SETTINGS, actor=root, target_type="setting", target_id="json-test", after={"a": "\u0645"})
+    pretty = client.get(f"/admin/audit/auditentry/{AuditEntry.objects.get(target_id='json-test').pk}/change/")
+    assert b"<pre dir='ltr' style='overflow-x:auto;text-align:left'>" in pretty.content
     assert client.post(f"/admin/audit/auditentry/{entry.pk}/change/", {"reason": "x"}).status_code == 403
     assert AuditEntry.objects.get(pk=entry.pk).reason == ""
 
