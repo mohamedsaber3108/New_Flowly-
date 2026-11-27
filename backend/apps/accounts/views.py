@@ -119,7 +119,9 @@ class LoginView(_Public):
         user.last_login = timezone.now()
         user.save(update_fields=["last_login"])
         audit.record(audit.A.LOGIN, actor=user, target=user, after={"via": "api"})
-        tokens = services.issue_tokens(user, mfa=second_factor_proven)
+        tokens = services.issue_tokens(
+            user, mfa=second_factor_proven, team_session=session_cookie.is_staff_session(user)
+        )
         user_data = UserSerializer(user, context={"request": request}).data
         if session_cookie.is_staff_session(user):  # FL-22: staff get cookies, and the body carries no token
             response = Response(
@@ -172,6 +174,9 @@ class RefreshView(TokenRefreshView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
     serializer_class = MfaAwareRefreshSerializer
+
+    def get_authenticate_header(self, request):
+        return "Bearer"  # an ended team session (session_expired, session_idle) is a 401, not a 403
 
     @extend_schema(tags=AUTH, summary="Exchange a refresh token for a new access token")
     def post(self, request, *args, **kwargs):
@@ -346,7 +351,7 @@ class GoogleCallbackView(_Public):
             if browser:
                 return HttpResponseRedirect(f"{settings.SITE_URL}/account/?error=staff_mfa")
             return envelope(refused.message, {"code": refused.code}, refused.status)
-        tokens = services.issue_tokens(user)
+        tokens = services.issue_tokens(user, team_session=session_cookie.is_staff_session(user))
         if session_cookie.is_staff_session(user):  # FL-22: no token in the address or the body for staff
             if browser:
                 response = HttpResponseRedirect(f"{settings.SITE_URL}/account/#session=cookie")

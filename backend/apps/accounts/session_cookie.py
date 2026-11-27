@@ -15,6 +15,8 @@ from rest_framework import exceptions
 from rest_framework.authentication import CSRFCheck
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from . import session_limits
+
 ACCESS_COOKIE = "flowly_staff_access"
 REFRESH_COOKIE = "flowly_staff_refresh"
 ACCESS_PATH = "/api/"
@@ -42,8 +44,8 @@ def set_staff_session(response, request, tokens):
     access_seconds = settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
     response.set_cookie(ACCESS_COOKIE, tokens["access"], **_cookie_options(ACCESS_PATH, access_seconds))
     # The refresh cookie lasts STAFF_SESSION_IDLE_SECONDS from the last refresh, so a session left alone ends after
-    # that (same default as the admin: 30 minutes). shortcut: the refresh JWT inside still expires after
-    # SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"] (7 days) on the server; add a shorter claim if a copied cookie matters.
+    # that (same default as the admin: 30 minutes). The server enforces the same idle limit and an 8-hour absolute
+    # limit itself, whatever the browser does with the cookie (apps/accounts/session_limits.py, FL-22b).
     response.set_cookie(
         REFRESH_COOKIE, tokens["refresh"], **_cookie_options(REFRESH_PATH, settings.STAFF_SESSION_IDLE_SECONDS)
     )
@@ -73,14 +75,20 @@ class CookieJWTAuthentication(JWTAuthentication):
     def authenticate(self, request):
         if self.get_header(request) is not None:
             result = super().authenticate(request)
-            if result and is_staff_session(result[0]) and not settings.ALLOW_STAFF_BEARER:
-                raise exceptions.AuthenticationFailed(
-                    "Team accounts sign in with the browser session, not a token.", "staff_bearer_refused"
-                )
+            if result and is_staff_session(result[0]):
+                if not settings.ALLOW_STAFF_BEARER:
+                    raise exceptions.AuthenticationFailed(
+                        "Team accounts sign in with the browser session, not a token.", "staff_bearer_refused"
+                    )
+                if result[1].payload.get("sid"):  # a token from a team sign-in carries the session limits
+                    session_limits.check(result[1].payload)
             return result
         raw = request.COOKIES.get(ACCESS_COOKIE)
         if not raw:
             return None
         token = self.get_validated_token(raw)
         enforce_csrf(request)
-        return self.get_user(token), token
+        user = self.get_user(token)
+        if is_staff_session(user):  # FL-22b: idle and 8-hour limits; a cookie without session claims is refused
+            session_limits.check(token.payload)
+        return user, token

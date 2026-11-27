@@ -62,6 +62,9 @@ def test_the_team_console_follows_the_site_language_right_to_left_in_arabic():
         "تسجيل الدخول",  # sign in
         "فعّله من هنا",  # enrol link text
         "تم تسجيل خروجك.",  # signed out
+        "تم تسجيل خروجك بعد ٣٠ دقيقة بلا نشاط.",  # session_idle
+        "وصلت جلستك إلى حدّها الأقصى، وهو ٨ ساعات.",  # session_expired
+        "انتهت جلستك.",  # any other end
         "سجّل الدخول من جديد",  # a way back in
         "ستنتهي جلستك بعد حوالي",  # expiry notice
         "ابقَ مسجّلًا",  # stay signed in
