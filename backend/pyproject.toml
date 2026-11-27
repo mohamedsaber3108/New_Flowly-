@@ -1,0 +1,4 @@
+# black does not read setup.cfg, so the repo's 120-column setting lives here.
+[tool.black]
+line-length = 120
+extend-exclude = "/migrations/"
