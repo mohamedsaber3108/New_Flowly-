@@ -28,6 +28,7 @@ overrides:
   source-map-js@^1.0.0: 1.2.2
   undici@^7.0.0: 7.30.1
   ws@^8.0.0: 8.21.0
-auditConfig:
-  ignoreGhsas:
-    - GHSA-mrhx-c7xc-m3w5
+# The zod advisory (GHSA-mrhx-c7xc-m3w5) is ignored in one place only: the `pnpm audit --ignore` flag in
+# .github/workflows/ci.yml, next to its explanation. Do not add it here again. Note: pnpm 11 itself writes an
+# `auditConfig.ignoreGhsas` entry into this file when `pnpm audit --ignore ...` is run on a developer machine;
+# delete that entry before committing (in CI the file is not committed back, so the flag alone is enough).

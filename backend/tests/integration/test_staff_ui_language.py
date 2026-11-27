@@ -85,6 +85,12 @@ def test_the_code_box_appears_only_after_the_server_asks_for_a_code():
     assert "if you have two-step verification" not in CONSOLE
 
 
+def test_the_code_box_takes_focus_through_a_ref_only_when_it_appears_not_through_autofocus():
+    assert "autoFocus" not in CONSOLE  # jsx-a11y/no-autofocus
+    assert "ref={codeBox}" in CONSOLE
+    assert "useEffect(()=>{if(needsCode)codeBox.current?.focus();},[needsCode]);" in CONSOLE
+
+
 def test_codes_addresses_and_references_stay_left_to_right_in_arabic():
     assert CONSOLE.count('dir="ltr"') >= 8  # email, password, code, token boxes; references and addresses in <bdi>
     assert '<pre dir="ltr">' in CONSOLE
