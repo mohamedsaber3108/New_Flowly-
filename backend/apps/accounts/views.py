@@ -7,13 +7,14 @@ from django.views.generic import TemplateView
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
 from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -23,7 +24,7 @@ from apps.core.negotiation import IgnoreClientContentNegotiation
 from apps.security import gate
 from apps.security import service as mfa_service
 
-from . import services
+from . import services, session_cookie
 from .serializers import (
     AvatarSerializer,
     ChangePasswordSerializer,
@@ -118,30 +119,53 @@ class LoginView(_Public):
         user.last_login = timezone.now()
         user.save(update_fields=["last_login"])
         audit.record(audit.A.LOGIN, actor=user, target=user, after={"via": "api"})
-        return Response(
-            {
-                "message": "Signed in.",
-                "data": {
-                    **services.issue_tokens(user, mfa=second_factor_proven),
-                    "user": UserSerializer(user, context={"request": request}).data,
-                },
-            }
-        )
+        tokens = services.issue_tokens(user, mfa=second_factor_proven)
+        user_data = UserSerializer(user, context={"request": request}).data
+        if session_cookie.is_staff_session(user):  # FL-22: staff get cookies, and the body carries no token
+            response = Response(
+                {
+                    "message": "Signed in.",
+                    "data": {
+                        "session": "cookie",
+                        "session_seconds": settings.STAFF_SESSION_IDLE_SECONDS,
+                        "user": user_data,
+                    },
+                }
+            )
+            return session_cookie.set_staff_session(response, request, tokens)
+        return Response({"message": "Signed in.", "data": {**tokens, "user": user_data}})
 
 
 class LogoutView(GenericAPIView):
+    """Blacklists the refresh token and clears the staff cookies. A browser session (cookies) needs only the CSRF
+    header, so it still works after the 15-minute access cookie has expired; a token client sends the refresh token."""
+
     serializer_class = LogoutSerializer
-    permission_classes = [IsAuthenticated]
+    authentication_classes: list = []  # checked below: the cookie case must not fail on an expired access cookie
+    permission_classes = [AllowAny]
+
+    def get_authenticate_header(self, request):
+        return "Bearer"  # so a request with no sign-in is a 401, not a 403
 
     @extend_schema(tags=AUTH, summary="Invalidate a refresh token", responses={200: OpenApiTypes.OBJECT})
     def post(self, request):
+        cookie_refresh = request.COOKIES.get(session_cookie.REFRESH_COOKIE)
+        if cookie_refresh and not (isinstance(request.data, dict) and request.data.get("refresh")):
+            session_cookie.enforce_csrf(request)
+            try:
+                RefreshToken(cookie_refresh).blacklist()
+            except TokenError:
+                pass  # already expired or blacklisted: the cookies are cleared either way
+            return session_cookie.clear_staff_session(Response({"message": "Signed out.", "data": None}))
+        if session_cookie.CookieJWTAuthentication().authenticate(request) is None:
+            raise NotAuthenticated()
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
             RefreshToken(serializer.validated_data["refresh"]).blacklist()
         except TokenError:
             return envelope("Invalid or expired refresh token.", None, 400)
-        return Response({"message": "Signed out.", "data": None})
+        return session_cookie.clear_staff_session(Response({"message": "Signed out.", "data": None}))
 
 
 class RefreshView(TokenRefreshView):
@@ -151,6 +175,41 @@ class RefreshView(TokenRefreshView):
 
     @extend_schema(tags=AUTH, summary="Exchange a refresh token for a new access token")
     def post(self, request, *args, **kwargs):
+        cookie_refresh = request.COOKIES.get(session_cookie.REFRESH_COOKIE)
+        if cookie_refresh and not (isinstance(request.data, dict) and request.data.get("refresh")):
+            # A staff browser session: the same rules as the token refresh (including the "mfa" claim check), then
+            # the rotated pair goes back into cookies and the body carries no token.
+            session_cookie.enforce_csrf(request)
+            serializer = self.get_serializer(data={"refresh": cookie_refresh})
+            try:
+                serializer.is_valid(raise_exception=True)
+            except TokenError as exc:
+                raise InvalidToken(exc.args[0])
+            tokens = {
+                "access": serializer.validated_data["access"],
+                "refresh": serializer.validated_data.get("refresh", cookie_refresh),
+            }
+            response = Response(
+                {
+                    "message": "Session refreshed.",
+                    "data": {"session": "cookie", "session_seconds": settings.STAFF_SESSION_IDLE_SECONDS},
+                }
+            )
+            return session_cookie.set_staff_session(response, request, tokens)
+        # A refresh token sent in the body: customers only (FL-22). A team account's token would come back as new
+        # tokens in JSON, which is what the cookie sign-in avoids, so it is refused unless ALLOW_STAFF_BEARER is on.
+        raw = request.data.get("refresh") if isinstance(request.data, dict) else None
+        if raw and not settings.ALLOW_STAFF_BEARER:
+            from django.contrib.auth import get_user_model
+
+            try:  # only reads the token: nothing is consumed or rotated here
+                owner = get_user_model().objects.filter(pk=RefreshToken(raw).get("user_id")).first()
+            except TokenError:
+                owner = None  # an invalid token gets the normal 401 below
+            if owner is not None and session_cookie.is_staff_session(owner):
+                raise AuthenticationFailed(
+                    "Team accounts sign in with the browser session, not a token.", "staff_bearer_refused"
+                )
         return super().post(request, *args, **kwargs)
 
 
@@ -288,6 +347,17 @@ class GoogleCallbackView(_Public):
                 return HttpResponseRedirect(f"{settings.SITE_URL}/account/?error=staff_mfa")
             return envelope(refused.message, {"code": refused.code}, refused.status)
         tokens = services.issue_tokens(user)
+        if session_cookie.is_staff_session(user):  # FL-22: no token in the address or the body for staff
+            if browser:
+                response = HttpResponseRedirect(f"{settings.SITE_URL}/account/#session=cookie")
+            else:
+                response = Response(
+                    {
+                        "message": "Signed in with Google.",
+                        "data": {"session": "cookie", "user": UserSerializer(user, context={"request": request}).data},
+                    }
+                )
+            return session_cookie.set_staff_session(response, request, tokens)
         if browser:
             fragment = f"access={tokens['access']}&refresh={tokens['refresh']}"
             return HttpResponseRedirect(f"{settings.SITE_URL}/account/#{fragment}")

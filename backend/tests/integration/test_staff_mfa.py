@@ -183,7 +183,9 @@ def test_api_login_with_a_device_needs_the_code_and_then_issues_tokens(require):
     wrong = api_login(staff.email, code="123456")
     assert wrong.status_code == 401 and wrong.json()["errors"]["code"] == "mfa_invalid"
     ok = api_login(staff.email, code=fresh_code(staff))
-    assert ok.status_code == 200 and ok.json()["data"]["access"] and ok.json()["data"]["user"]["email"] == staff.email
+    # FL-22: staff get their tokens in httpOnly cookies, and none in the body
+    assert ok.status_code == 200 and ok.cookies["flowly_staff_access"].value and "access" not in ok.json()["data"]
+    assert ok.json()["data"]["user"]["email"] == staff.email
 
 
 def test_api_login_recovery_code_works_once(require):
@@ -502,12 +504,12 @@ def refresh_with(refresh_token):
 def test_a_staff_refresh_token_from_before_the_switch_is_refused_after_it(settings):
     staff = StaffFactory()
     enrol(staff)
-    old = api_login(staff.email, code=fresh_code(staff)).json()["data"]["refresh"]  # rule off: no second factor asked?
+    old = api_login(staff.email, code=fresh_code(staff)).cookies["flowly_staff_refresh"].value
     assert refresh_with(old).status_code == 200  # the rule is off, so refresh works
 
     # A token issued without any second factor (rule off, never enrolled): the case the reviewer described.
     plain_staff = StaffFactory()
-    before_switch = api_login(plain_staff.email).json()["data"]["refresh"]
+    before_switch = api_login(plain_staff.email).cookies["flowly_staff_refresh"].value
     assert refresh_with(before_switch).status_code == 200  # still fine while the rule is off
 
     settings.REQUIRE_STAFF_MFA = True
@@ -519,8 +521,8 @@ def test_a_staff_refresh_token_from_before_the_switch_is_refused_after_it(settin
 def test_a_refresh_token_from_a_code_sign_in_keeps_working_and_rotation_keeps_the_claim(require):
     staff = StaffFactory()
     enrol(staff)
-    tokens = api_login(staff.email, code=fresh_code(staff)).json()["data"]
-    first = refresh_with(tokens["refresh"])
+    refresh = api_login(staff.email, code=fresh_code(staff)).cookies["flowly_staff_refresh"].value
+    first = refresh_with(refresh)
     assert first.status_code == 200
     rotated = first.json()["data"]["refresh"]
     assert RefreshToken(rotated)["mfa"] is True and AccessToken(first.json()["data"]["access"])["mfa"] is True
