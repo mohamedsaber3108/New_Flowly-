@@ -1,3 +1,5 @@
+from cryptography.fernet import Fernet
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
@@ -15,7 +17,7 @@ LOG_TO_FILE = False
 REQUIRE_EMAIL_VERIFICATION = True
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ADMIN_TOKEN = "flowly-local-test-admin-token-123456789"
-MFA_ENCRYPTION_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="  # test-only Fernet key, protects nothing
+MFA_ENCRYPTION_KEY = Fernet.generate_key().decode()  # a new throwaway key each test run: nothing is stored or reused
 FRONTEND_URL = "https://flowly.test"
 SITE_URL = "https://flowly.test"
 REST_FRAMEWORK["NUM_PROXIES"] = 0  # noqa: F405
