@@ -1,8 +1,8 @@
 """Admin pages for the site settings, the blocked days and the read-only module registry (FL-21).
 
 Who may do what (checked on the server, not only in the page):
-* owner and staff: view and change the settings, add and remove blocked days;
-* viewer: view only (the page shows the values, the save buttons are not offered and a POST is refused);
+* owner (and superuser): view and change the settings, add and remove blocked days;
+* staff and viewer: view only (the page shows the values, the save buttons are not offered and a POST is refused);
 * everyone else: no access.
 Every change writes one JSON line to the logger "flowly.admin" (who, what, before and after).
 No setting here is a secret.
@@ -33,7 +33,9 @@ WEEKDAY_CHOICES = [  # Sunday first: the working week here starts on Sunday
     (5, "Saturday"),
 ]
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-CHANGE_ROLES = ("owner", "staff")
+# Default taken (question Q-F14, ADMIN.md s.3: settings and flags are changed by the top role only): owner and
+# superuser change; staff and viewer read. The owner may widen this to owner + staff by adding "staff" here.
+CHANGE_ROLES = ("owner",)
 VIEW_ROLES = ("owner", "staff", "viewer")
 
 

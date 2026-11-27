@@ -8,6 +8,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -17,7 +18,7 @@ from apps.core import modules
 from apps.leads import site_settings
 from apps.leads.models import BlockedDay, Request, SiteSettings
 from tests.conftest import future_workday
-from tests.factories import RequestFactory, StaffFactory, UserFactory
+from tests.factories import OwnerFactory, RequestFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
 ORIGIN = "https://flowly.test"
@@ -253,7 +254,8 @@ FORM = {
 
 
 def staff_client(**user_kwargs):
-    user = UserFactory(**user_kwargs) if user_kwargs else StaffFactory()
+    """A signed-in team member; an owner (who may change the settings) unless other user fields are given."""
+    user = UserFactory(**user_kwargs) if user_kwargs else OwnerFactory()
     client = Client()
     client.force_login(user)
     return client, user
@@ -267,7 +269,40 @@ def events(caplog):
     ]
 
 
-def test_staff_can_open_and_change_the_settings_and_it_takes_effect(api, payload, caplog):
+def test_staff_can_look_but_not_change_settings_or_blocked_days(api, payload):
+    """Default taken (Q-F14): only the owner changes settings. The refusal is on the server, not only in the page."""
+    SiteSettings.objects.create()
+    client, _ = staff_client(role="staff", is_staff=True)
+    page = client.get(URL)
+    assert page.status_code == 200 and b'name="_save"' not in page.content
+    assert client.post(URL, {**FORM, "booking_horizon_days": "30"}).status_code == 403
+    assert SiteSettings.objects.get(pk=1).booking_horizon_days == 90
+    assert client.get("/admin/leads/blockedday/").status_code == 200
+    assert client.get("/admin/leads/blockedday/add/").status_code == 403
+    assert client.post("/admin/leads/blockedday/add/", {"date": payload["date"], "reason": "x"}).status_code == 403
+    assert not BlockedDay.objects.exists()
+    day = BlockedDay.objects.create(date=payload["date"], reason="Team away")
+    assert client.post(f"/admin/leads/blockedday/{day.pk}/delete/", {"post": "yes"}).status_code == 403
+    assert BlockedDay.objects.filter(pk=day.pk).exists()
+
+
+def test_the_booking_picker_clears_the_chosen_time_at_once_on_a_date_change_and_on_a_load_error():
+    """No browser test runner here, so this only checks that the picker's code does it (see the PR note)."""
+    source = (Path(__file__).resolve().parents[3] / "frontend" / "components" / "Intake.tsx").read_text()
+    effect = source.split("useEffect(()=>{setTime('');if(!date)return;", 1)[1].split("},[date]);", 1)[0]
+    assert "setTime('');setAvailabilityError(true)" in effect  # a failed load drops the time too
+
+
+def test_a_superuser_can_change_the_settings_too():
+    SiteSettings.objects.create()
+    root = UserFactory(is_staff=True, is_superuser=True, role="customer")
+    client = Client()
+    client.force_login(root)
+    assert client.post(URL, {**FORM, "booking_horizon_days": "30"}).status_code == 302
+    assert SiteSettings.objects.get(pk=1).booking_horizon_days == 30
+
+
+def test_the_owner_can_open_and_change_the_settings_and_it_takes_effect(api, payload, caplog):
     caplog.set_level(logging.INFO, logger="flowly.admin")
     client, user = staff_client()
     page = client.get("/admin/leads/sitesettings/", follow=True)
