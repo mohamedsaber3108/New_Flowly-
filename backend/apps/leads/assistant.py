@@ -6,9 +6,13 @@ provider, or if the provider fails, the visitor gets catalog-grounded guidance.
 
 import logging
 import re
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 
 from . import catalog
 
@@ -84,7 +88,8 @@ def guide(message: str, arabic: bool) -> dict:
         }
     )
     links.append({"title": "اطلب استشارة" if arabic else "Request a consultation", "url": "/consultation"})
-    return {"reply": ar if arabic else en, "links": links, "mode": "guide"}
+    # "mode" is kept for the existing frontend; "source" is the label the page shows ("guide" or "ai").
+    return {"reply": ar if arabic else en, "links": links, "mode": "guide", "source": "guide"}
 
 
 def provider():
@@ -100,7 +105,8 @@ def provider():
 
 
 def configured() -> bool:
-    return bool(provider())
+    """True when answers may come from a model: a provider is set AND the kill switch is on."""
+    return bool(settings.ASSISTANT_AI_ENABLED and provider())
 
 
 def _system_prompt(language: str) -> str:
@@ -119,11 +125,104 @@ def _system_prompt(language: str) -> str:
     )
 
 
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+_NUMBER_RE = re.compile(r"\+?\d[\d\s().-]{6,}\d")  # a phone-like run of digits
+# Any address a visitor could follow: scheme links, "www.", protocol-relative "//host", and bare "host.tld[/path]".
+# shortcut: a missing space after a full stop ("end.Next") also looks like a host.tld and falls back to the guide;
+# that fails closed and is rare, so it is kept. Upgrade only if the guide shows up too often.
+_REST = r"[^\s)\]>\"'<]*"
+_URL_RE = re.compile(
+    rf"(?:https?://|www\.|(?<![\w:/])//){_REST}"
+    rf"|(?<![\w@./-])(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{{2,24}}\b(?:[:/]{_REST})?",
+    re.I,
+)
+HISTORY_TURNS = 4
+HISTORY_CHARS = 500
+
+
+def _redact(text):
+    """Earlier turns go to the provider with email addresses and phone-like numbers removed."""
+    return _NUMBER_RE.sub("[number]", _EMAIL_RE.sub("[email]", text))[:HISTORY_CHARS]
+
+
 def _history(history, message):
-    items = [{"role": h["role"], "content": h["content"]} for h in history[-6:]]
-    if items and items[-1]["content"] == message:
+    """Only role and text of the last few turns, redacted. Never a name, email, link list or anything else the page
+    keeps next to the messages. The current message itself is sent as the visitor typed it."""
+    # Only the visitor's and the assistant's turns: a "system" (or any other) role from the page is never forwarded.
+    turns = [
+        h
+        for h in history
+        if isinstance(h, dict) and h.get("role") in ("user", "assistant") and isinstance(h.get("content"), str)
+    ]
+    items = [{"role": h["role"], "content": _redact(h["content"])} for h in turns[-HISTORY_TURNS:]]
+    if items and items[-1]["content"] == _redact(message):
         items.pop()
     return items
+
+
+# --- safety around a model's answer ---------------------------------------------------------------------------
+
+
+def _squash(text):
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _site_hosts():
+    hosts = set()
+    for value in (settings.SITE_URL, settings.FRONTEND_URL, getattr(settings, "PUBLIC_ORIGIN", "")):
+        host = urlparse(value or "").hostname
+        if host:
+            hosts.add(host.lower())
+    for host in settings.ALLOWED_HOSTS:  # explicit names only; "*" and ".suffix" wildcards allow nothing
+        if host and host != "*" and not host.startswith("."):
+            hosts.add(host.lower())
+    return hosts
+
+
+def unsafe_reason(reply, system):
+    """Why a model reply must not be shown, or "" if it may be. Checks: the system prompt is not repeated, there is
+    no address outside the site (a link or an email), so a successful injection still cannot show hidden text or send
+    visitors away."""
+    instructions = system.split("Catalog:")[0]
+    squashed = _squash(reply)
+    for sentence in re.split(r"(?<=[.!?])\s+", instructions):
+        sentence = _squash(sentence)
+        if len(sentence) >= 30 and sentence in squashed:
+            return "repeats the system prompt"
+    allowed = _site_hosts()
+    for url in _URL_RE.findall(reply):
+        host = urlparse(url if url.startswith("//") or "://" in url else f"//{url}").hostname or ""
+        if host.lower() not in allowed:
+            return "links outside the site"
+    if _EMAIL_RE.search(reply):
+        return "contains an email address"
+    return ""
+
+
+# --- cost cap -----------------------------------------------------------------------------------------------------
+
+
+def _now():
+    return datetime.now(ZoneInfo("Africa/Cairo"))
+
+
+def reserve_model_call():
+    """Count one model call for today (Cairo day). False when the day's limit (ASSISTANT_DAILY_LIMIT) is used up.
+
+    The counter is read and written with an explicit timeout (end of the day plus an hour) because DatabaseCache.incr
+    would store it again with the default 300 s. shortcut: read-then-write is not atomic, so a burst of parallel
+    calls can pass the limit by a few; that is a cost cap, not a security boundary.
+    """
+    now = _now()
+    key = f"assistant:model-calls:{now.date().isoformat()}"
+    used = cache.get(key, 0)
+    if used >= settings.ASSISTANT_DAILY_LIMIT:
+        if cache.add(f"{key}:warned", 1, timeout=86400):  # one log line a day, not one per visitor
+            logger.warning("Assistant daily model limit (%s) reached; the guide answers until tomorrow", used)
+        return False
+    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    cache.set(key, used + 1, timeout=int((midnight - now).total_seconds()) + 3600)
+    return True
 
 
 def _call_bedrock(system, message, history):
@@ -185,13 +284,25 @@ def answer(message: str, language: str, history: list) -> dict:
     arabic = language == "ar"
     fallback = guide(message, arabic)
     name = provider()
-    if not name:
+    # Guide only: no provider, or the kill switch is off, or today's model calls are used up.
+    if not name or not settings.ASSISTANT_AI_ENABLED:
         return fallback
     try:
-        reply = _CALLERS[name](_system_prompt(language), message, history)
+        if not reserve_model_call():
+            return fallback
+    except Exception:  # noqa: BLE001 - fail closed: if the cap cannot be counted, no model call is made
+        logger.warning("Assistant cost cap could not be checked; the guide answers", exc_info=True)
+        return fallback
+    system = _system_prompt(language)
+    try:
+        reply = _CALLERS[name](system, message, history)
         if not reply or not reply.strip():
             raise ValueError("empty reply")
-        return {"reply": reply[:6000], "links": fallback["links"][:3], "mode": "ai"}
+        reason = unsafe_reason(reply, system)
+        if reason:  # a manipulated model: show the catalog guide instead of its words
+            logger.warning("AI reply not shown (%s); using catalog guide", reason)
+            return fallback
+        return {"reply": reply.strip()[:6000], "links": fallback["links"][:3], "mode": "ai", "source": "ai"}
     except Exception:  # noqa: BLE001 - any provider failure degrades to the guide
         logger.warning("AI provider '%s' failed; using catalog guide", name, exc_info=True)
         prefix = (

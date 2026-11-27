@@ -229,6 +229,11 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "flowly_cache_table",
+        # Django's default is 300 entries. When the table is full it deletes the lowest KEYS first (not the oldest),
+        # and every visitor's throttle key adds a row, so counters such as "assistant:model-calls:<day>" and the
+        # sign-in lock counters could be thrown away early and a cap would reset. 50000 rows is a few MB; when it is
+        # ever full, only 1 row in 10 is culled.
+        "OPTIONS": {"MAX_ENTRIES": 50000, "CULL_FREQUENCY": 10},
     }
 }
 
@@ -258,6 +263,11 @@ ADMIN_SESSION_IDLE_SECONDS = config("ADMIN_SESSION_IDLE_SECONDS", default=1800, 
 ADMIN_SESSION_MAX_SECONDS = config("ADMIN_SESSION_MAX_SECONDS", default=28800, cast=int)
 TEAM_NOTIFY_EMAIL = config("TEAM_NOTIFY_EMAIL", default="")
 ASSISTANT_LOG_ENABLED = config("ASSISTANT_LOG_ENABLED", default=False, cast=bool)
+# Kill switch: the assistant uses an AI model ONLY when this is True AND a provider is configured. Default off, so the
+# catalog guide answers (no provider cost, no model risk) until the owner switches it on (FL-17).
+ASSISTANT_AI_ENABLED = config("ASSISTANT_AI_ENABLED", default=False, cast=bool)
+# Most model calls per day (Africa/Cairo day) across the whole site. Over the limit, visitors get the guide.
+ASSISTANT_DAILY_LIMIT = config("ASSISTANT_DAILY_LIMIT", default=200, cast=int)
 AI_PROVIDER = config("AI_PROVIDER", default="")  # bedrock | compatible | dify | "" (guide only)
 AI_API_URL = config("AI_API_URL", default="")
 AI_API_KEY = config("AI_API_KEY", default="")
