@@ -6,6 +6,19 @@ This Unfold version expects oklch() values.
 
 from django.urls import reverse_lazy
 
+
+def idle_warning_script(request):
+    """The notice before the idle sign-out (apps/security/middleware.py). The limit and the keep-alive address are
+    passed in the query string so the script follows ADMIN_SESSION_IDLE_SECONDS."""
+    from django.conf import settings
+    from django.templatetags.static import static
+    from django.urls import reverse
+
+    return (
+        f"{static('security/admin-idle.js')}?idle={settings.ADMIN_SESSION_IDLE_SECONDS}&ping={reverse('admin:index')}"
+    )
+
+
 UNFOLD = {
     "SITE_TITLE": "Flowly Admin",
     "SITE_HEADER": "Flowly",
@@ -19,7 +32,7 @@ UNFOLD = {
     "SHOW_VIEW_ON_SITE": False,
     "DASHBOARD_CALLBACK": "apps.core.dashboard.dashboard_callback",
     "STYLES": [],
-    "SCRIPTS": [],
+    "SCRIPTS": [idle_warning_script],
     "COLORS": {
         "primary": {
             "50": "oklch(97.5% .015 45)",

@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.leads",
+    "apps.security",
     "apps.audit",
 ]
 
@@ -55,6 +56,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.security.middleware.StaffSessionLimitsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "apps.audit.context.AuditContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -241,6 +243,24 @@ ADMIN_TOKEN = config("ADMIN_TOKEN", default="")  # legacy /team bearer token (>=
 AUDIT_EXPORT_DIR = config("AUDIT_EXPORT_DIR", default=str(BASE_DIR / "audit_exports"))
 # The shared ADMIN_TOKEN is ignored (401) unless this is True. Default off: team members sign in with a named account.
 ALLOW_SHARED_ADMIN_TOKEN = config("ALLOW_SHARED_ADMIN_TOKEN", default=False, cast=bool)
+
+# --- Staff sign-in hardening (FL-09) ---------------------------------------
+# Owner/staff must prove a second factor (authenticator code or recovery code) at every sign-in entrance. Default
+# off, so deploying does not lock the team out: enrol everyone first (/account/mfa/enroll/), then set this to True.
+# People who already enrolled are asked for a code even while this is off.
+REQUIRE_STAFF_MFA = config("REQUIRE_STAFF_MFA", default=False, cast=bool)
+# Fernet key that encrypts the authenticator secrets in the database. Generate it on the server and keep it in .env:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+MFA_ENCRYPTION_KEY = config("MFA_ENCRYPTION_KEY", default="")
+# 5 failed sign-ins within 15 minutes lock that account's sign-in for 15 minutes, on every entrance.
+LOGIN_LOCKOUT_ATTEMPTS = config("LOGIN_LOCKOUT_ATTEMPTS", default=5, cast=int)
+LOGIN_LOCKOUT_SECONDS = config("LOGIN_LOCKOUT_SECONDS", default=900, cast=int)
+# ... per email AND per IP address (5), plus a cap per IP across all emails (20) and one per email across all IPs (50).
+LOGIN_LOCKOUT_IP_ATTEMPTS = config("LOGIN_LOCKOUT_IP_ATTEMPTS", default=20, cast=int)
+LOGIN_LOCKOUT_EMAIL_ATTEMPTS = config("LOGIN_LOCKOUT_EMAIL_ATTEMPTS", default=50, cast=int)
+# Django admin sessions of staff: signed out after 30 minutes without a request, and after 8 hours in all.
+ADMIN_SESSION_IDLE_SECONDS = config("ADMIN_SESSION_IDLE_SECONDS", default=1800, cast=int)
+ADMIN_SESSION_MAX_SECONDS = config("ADMIN_SESSION_MAX_SECONDS", default=28800, cast=int)
 TEAM_NOTIFY_EMAIL = config("TEAM_NOTIFY_EMAIL", default="")
 ASSISTANT_LOG_ENABLED = config("ASSISTANT_LOG_ENABLED", default=False, cast=bool)
 # Kill switch: the assistant uses an AI model ONLY when this is True AND a provider is configured. Default off, so the
