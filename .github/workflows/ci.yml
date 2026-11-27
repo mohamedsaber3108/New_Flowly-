@@ -49,14 +49,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements/test.txt
       - name: flake8
+        if: ${{ !cancelled() }}
         run: flake8 .
       - name: black --check
+        if: ${{ !cancelled() }}
         run: black --check .
       - name: isort --check
+        if: ${{ !cancelled() }}
         run: isort --check-only .
       - name: Migrations are up to date
+        if: ${{ !cancelled() }}
         run: python manage.py makemigrations --check --dry-run
       - name: pytest
+        if: ${{ !cancelled() }}
         run: pytest
 
   frontend:
@@ -74,8 +79,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Type check
@@ -105,15 +108,19 @@ jobs:
         with:
           python-version: "3.12"
       - name: pip-audit
+        if: ${{ !cancelled() }}
         run: |
           pip install pip-audit
           pip-audit -r backend/requirements/production.txt
       - uses: pnpm/action-setup@v4
+        if: ${{ !cancelled() }}
         with:
           package_json_file: frontend/package.json
       - uses: actions/setup-node@v4
+        if: ${{ !cancelled() }}
         with:
           node-version: "22"
       - name: pnpm audit
+        if: ${{ !cancelled() }}
         working-directory: frontend
         run: pnpm audit --audit-level high
