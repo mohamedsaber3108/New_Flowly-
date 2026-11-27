@@ -58,6 +58,16 @@ def _off_message(texts, payload):
     return texts.get(language) or f"{texts['en']} / {texts['ar']}"
 
 
+_ARABIC_DIGITS = str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")  # the site shows Arabic-Indic digits in Arabic text
+
+
+def _horizon_message(horizon, payload):
+    """The 'not an available date' error in the visitor's language (the request form requires `language`)."""
+    if payload.get("language") == "ar":
+        return f"اختر يوم عمل متاحًا في المستقبل خلال {str(horizon).translate(_ARABIC_DIGITS)} يومًا."
+    return f"Choose an available future working day within {horizon} days."
+
+
 def submit_request(request, payload, user=None):
     """Returns (http_status, body)."""
     if not site_settings.get().intake_enabled:  # switched off in the admin: save nothing, say so clearly
@@ -67,8 +77,7 @@ def submit_request(request, payload, user=None):
         raise IntakeError(400, flatten_errors(serializer.errors), serializer.errors)
     data = serializer.validated_data
     if data.get("date") and not valid_future_date(data["date"]):
-        horizon = site_settings.get().horizon_days
-        message = f"Choose an available future working day within {horizon} days."
+        message = _horizon_message(site_settings.get().horizon_days, payload)
         raise IntakeError(400, message, {"date": [message]})
     existing = services.find_existing(data["requestKey"])
     if existing:  # safe retry: same browser key returns the original reference
@@ -132,6 +141,21 @@ def availability(date_str):
         {"time": t, "available": t not in busy, "label": f"{t} ({site_settings.TIMEZONE})"} for t in snapshot.slot_times
     ]
     return {**base, "busy": busy, "slots": slots, "closed": False}
+
+
+def calendar():
+    """What the booking calendar needs before a date is chosen: open weekdays (JavaScript numbering, Sunday=0), how
+    far ahead, and the blocked dates inside that range (dates only; the reason stays private)."""
+    snapshot = site_settings.get()
+    today = site_settings.today_cairo()
+    last = today + timedelta(days=snapshot.horizon_days)
+    blocked = sorted(d for d in snapshot.blocked if today < date_cls.fromisoformat(d) <= last)
+    return {
+        "timezone": site_settings.TIMEZONE,
+        "weekdays": sorted((d + 1) % 7 for d in snapshot.weekdays),  # Python Monday=0 -> JavaScript Sunday=0
+        "horizonDays": snapshot.horizon_days,
+        "blocked": blocked,
+    }
 
 
 def assistant_reply(request, payload, user=None):

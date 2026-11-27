@@ -141,6 +141,13 @@ def default_slot_times():
     return ["10:00", "11:00", "12:00", "14:00", "15:00"]
 
 
+class SingleRowManager(models.Manager):
+    """`save()` forces pk=1, but `bulk_create()` would skip it and could add a second row. Refuse it."""
+
+    def bulk_create(self, objs, *args, **kwargs):
+        raise TypeError("Site settings are a single row: use SiteSettings.load() and save().")
+
+
 class SiteSettings(models.Model):
     """The one row of settings the team changes in the admin (FL-21). Secrets are NOT stored here: they stay in env.
 
@@ -173,6 +180,8 @@ class SiteSettings(models.Model):
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+", editable=False
     )
+
+    objects = SingleRowManager()
 
     class Meta:
         db_table = "leads_site_settings"

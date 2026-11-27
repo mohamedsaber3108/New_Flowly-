@@ -152,6 +152,37 @@ def test_the_horizon_is_read_from_the_settings(api, payload):
     assert refused.status_code == 400 and "within 10 days" in refused.json()["error"]
 
 
+def test_the_horizon_error_is_in_the_visitors_language_with_digits_to_match(api, payload):
+    SiteSettings.objects.create(booking_horizon_days=10)
+    far = future_workday(days=20)
+    arabic = post_request(api, {**payload, "date": far, "language": "ar"}).json()["error"]
+    assert "خلال ١٠ يومًا" in arabic and "within" not in arabic
+    english = post_request(api, {**payload, "date": far, "language": "en"}).json()["error"]
+    assert "within 10 days" in english and "خلال" not in english
+
+
+def test_the_calendar_endpoint_gives_open_weekdays_horizon_and_blocked_dates_without_the_reason(api):
+    default = api.get("/api/availability", {"calendar": "1"}).json()
+    assert default["weekdays"] == [0, 1, 2, 3, 4]  # Sunday to Thursday, JavaScript numbering (Sunday=0)
+    assert default["horizonDays"] == 90 and default["blocked"] == [] and default["timezone"] == "Africa/Cairo"
+    SiteSettings.objects.create(booking_weekdays=[0, 6], booking_horizon_days=20)  # Monday and Sunday
+    soon, far = cairo_today() + timedelta(days=5), cairo_today() + timedelta(days=40)
+    BlockedDay.objects.create(date=soon, reason="Team away")
+    BlockedDay.objects.create(date=far, reason="Outside the range")
+    body = api.get("/api/availability", {"calendar": "1"}).json()
+    assert body["weekdays"] == [0, 1] and body["horizonDays"] == 20
+    assert body["blocked"] == [soon.isoformat()]  # only dates inside the range
+    assert "Team away" not in json.dumps(body)
+    assert api.get("/api/v1/availability/", {"calendar": "1"}).json()["data"]["weekdays"] == [0, 1]
+    assert api.get("/api/availability").status_code == 400  # a date is still required without the calendar flag
+
+
+def test_the_settings_table_refuses_bulk_create_so_it_stays_one_row():
+    with pytest.raises(TypeError):
+        SiteSettings.objects.bulk_create([SiteSettings(), SiteSettings()])
+    assert SiteSettings.objects.count() == 0
+
+
 def test_settings_are_cached_for_a_minute_and_cleared_on_save(django_assert_num_queries):
     site_settings.get()
     with django_assert_num_queries(0):
