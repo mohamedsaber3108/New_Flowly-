@@ -176,12 +176,12 @@ def confirm_enrollment(user, code):
     return codes
 
 
-def reset_device(user, by=""):
+def reset_device(user, by="", **context):
     """Owner action (or the break-glass command): remove the device and recovery codes so the user can enrol again.
-    `by` says who did it, for the log line."""
+    `by` says who did it; `context` adds facts to the log line (the command adds the server user and host)."""
     MfaDevice.objects.filter(user=user).delete()
     RecoveryCode.objects.filter(user=user).delete()
-    log_event("mfa.reset", level=logging.WARNING, user_id=user.pk, email=user.email, by=by)
+    log_event("mfa.reset", level=logging.WARNING, user_id=user.pk, email=user.email, by=by, **context)
 
 
 # --- sign-in check -----------------------------------------------------------------------------------------------

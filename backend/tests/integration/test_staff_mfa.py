@@ -8,6 +8,8 @@ import base64
 import json
 import logging
 import time
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -623,6 +625,127 @@ def test_the_enrolled_list_in_the_admin_is_read_only_and_never_shows_the_secret(
     assert client.get("/admin/security/mfadevice/add/").status_code == 403
     assert client.post(f"/admin/security/mfadevice/{device.pk}/delete/", {"post": "yes"}).status_code == 403
     assert MfaDevice.objects.filter(pk=device.pk).exists()
+
+
+# --- review round 2 ------------------------------------------------------------------------------------------
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 1_800_000_000.0
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+@pytest.fixture
+def clock():
+    """One fake clock for time.time() and for the database cache's own 'now', so expiry follows it."""
+    fake = FakeClock()
+    with mock.patch("time.time", side_effect=lambda: fake.now), mock.patch(
+        "django.core.cache.backends.db.tz_now", side_effect=lambda: datetime.fromtimestamp(fake.now, tz=dt_timezone.utc)
+    ):
+        yield fake
+
+
+def use_cache(settings, backend):
+    if backend == "db":  # the production cache: counters must not lose their 15 minutes here
+        settings.CACHES = {
+            "default": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "flowly_test_cache"}
+        }
+        call_command("createcachetable", verbosity=0)
+        from django.core.cache import caches
+
+        assert type(caches["default"]).__name__ == "DatabaseCache"
+    cache.clear()
+
+
+@pytest.mark.parametrize("backend", ["locmem", "db"])
+def test_the_failure_window_and_the_lock_each_last_fifteen_minutes(backend, settings, clock):
+    use_cache(settings, backend)
+    email, ip = "clock@example.test", IP_A
+    lockout.register_failure(email, ip)  # t = 0
+    for wait in (200, 250, 250, 190):  # failures at 200, 450, 700 and 890 s: all inside the first 15 minutes
+        clock.advance(wait)
+        assert not lockout.is_locked(email, ip)
+        lockout.register_failure(email, ip)
+    assert lockout.is_locked(email, ip)  # the 5th failure, 890 s after the first, locked it
+    clock.advance(899)
+    assert lockout.is_locked(email, ip)  # still locked 899 s later (a 300 s default would have let go)
+    clock.advance(2)
+    assert not lockout.is_locked(email, ip)  # 15 minutes after the lock started it is over
+
+
+@pytest.mark.parametrize("backend", ["locmem", "db"])
+def test_failures_older_than_fifteen_minutes_are_forgotten(backend, settings, clock):
+    use_cache(settings, backend)
+    email, ip = "window@example.test", IP_A
+    for _ in range(4):
+        lockout.register_failure(email, ip)
+    clock.advance(901)  # the window is over
+    for _ in range(4):
+        lockout.register_failure(email, ip)
+    assert not lockout.is_locked(email, ip)  # 4 failures in the new window, not 8
+    lockout.register_failure(email, ip)
+    assert lockout.is_locked(email, ip)
+
+
+def test_the_lock_log_line_never_contains_typed_text_that_could_be_a_password(caplog):
+    caplog.set_level(logging.INFO, logger="flowly.security")
+    typed = "Str0ng-Passw0rd!x"  # a password pasted into the email box
+    for _ in range(5):
+        Client().post(ADMIN_LOGIN, {"username": typed, "password": "x", "otp": ""}, REMOTE_ADDR=IP_A)
+    staff = StaffFactory(email="someone.private@example.test")
+    for _ in range(5):
+        api_login(staff.email, password="Wrong-Password-1!", ip=IP_B)
+    locked = [e for e in security_events(caplog) if e["event"] == "signin.locked"]
+    assert [e["email"] for e in locked if e["scope"] == "email+ip"] == ["[not an email]", "s***@example.test"]
+    assert typed not in caplog.text and "someone.private" not in caplog.text and "Wrong-Password-1!" not in caplog.text
+
+
+def test_the_break_glass_log_line_names_the_server_user_the_sudo_user_and_the_host(caplog, monkeypatch):
+    caplog.set_level(logging.INFO, logger="flowly.security")
+    owner = OwnerFactory()
+    enrol(owner)
+    monkeypatch.setenv("SUDO_USER", "alice")
+    with mock.patch("getpass.getuser", return_value="flowly"), mock.patch("socket.gethostname", return_value="srv-1"):
+        call_command("reset_staff_mfa", "--email", owner.email, stdout=StringIO())
+    reset = next(e for e in security_events(caplog) if e["event"] == "mfa.reset")
+    assert (reset["os_user"], reset["sudo_user"], reset["host"]) == ("flowly", "alice", "srv-1")
+    assert reset["by"] == "management command reset_staff_mfa"
+
+
+def test_an_owner_can_clear_a_sign_in_lock_but_staff_cannot(caplog):
+    caplog.set_level(logging.INFO, logger="flowly.security")
+    target, owner, other = StaffFactory(), OwnerFactory(), StaffFactory()
+    for _ in range(5):
+        api_login(target.email, password="Wrong-Password-1!", ip=IP_A)
+    assert api_login(target.email, ip=IP_A).status_code == 429
+    model_admin = UserAdmin(User, django_admin.site)
+
+    def run(actor):
+        request = DjangoRequestFactory().post("/admin/accounts/user/")
+        request.user = actor
+        request.session = {}
+        request._messages = mock.MagicMock()
+        model_admin.clear_sign_in_lock(request, User.objects.filter(pk=target.pk))
+
+    run(other)  # a normal staff member
+    assert api_login(target.email, ip=IP_A).status_code == 429
+    run(owner)
+    assert api_login(target.email, ip=IP_A).status_code == 200
+    cleared = next(e for e in security_events(caplog) if e["event"] == "signin.lock_cleared")
+    assert cleared["by"] == f"{owner.email} (admin action)"
+
+
+def test_an_owner_clear_also_lifts_the_per_email_cap_from_many_addresses(settings):
+    settings.LOGIN_LOCKOUT_EMAIL_ATTEMPTS = 6
+    user = UserFactory()
+    for n in range(6):
+        api_login(user.email, password="Wrong-Password-1!", ip=f"198.51.100.{n + 1}")
+    assert api_login(user.email, ip=IP_B).status_code == 429
+    lockout.clear_email(user.email, by="test")
+    assert api_login(user.email, ip=IP_B).status_code == 200
 
 
 def test_break_glass_command_refuses_unknown_and_customer_accounts():

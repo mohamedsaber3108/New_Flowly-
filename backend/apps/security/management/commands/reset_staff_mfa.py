@@ -7,6 +7,10 @@ Run it on the server only, as the app user. It writes a warning line to the "flo
 what it did.
 """
 
+import getpass
+import os
+import socket
+
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
@@ -27,7 +31,14 @@ class Command(BaseCommand):
         if not service.is_team_user(user):
             raise CommandError(f"{email} is not an owner or staff account: there is nothing to reset.")
         had_device = service.MfaDevice.objects.filter(user=user).exists()
-        service.reset_device(user, by="management command reset_staff_mfa")
+        # Who is at the keyboard: the server user, the person behind sudo (if any) and the machine.
+        service.reset_device(
+            user,
+            by="management command reset_staff_mfa",
+            os_user=getpass.getuser(),
+            sudo_user=os.environ.get("SUDO_USER", ""),
+            host=socket.gethostname(),
+        )
         self.stdout.write(
             f"Two-step verification reset for {email}"
             + ("." if had_device else " (there was no device; recovery codes cleared).")
