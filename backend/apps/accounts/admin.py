@@ -3,6 +3,8 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
+from apps.security import service as mfa_service
+
 from .models import User
 
 
@@ -12,6 +14,18 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
     add_form = UserCreationForm
     change_password_form = AdminPasswordChangeForm
     model = User
+
+    actions = ["reset_two_step_verification"]
+
+    @admin.action(description="Reset two-step verification (the person sets it up again)")
+    def reset_two_step_verification(self, request, queryset):
+        """Lost phone and recovery codes: an owner removes the device so the person can enrol again."""
+        if not (request.user.is_superuser or getattr(request.user, "role", "") == "owner"):
+            self.message_user(request, "Only an owner can reset two-step verification.", level="error")
+            return
+        for user in queryset:
+            mfa_service.reset_device(user)
+        self.message_user(request, f"Two-step verification reset for {queryset.count()} user(s).")
 
     list_display = ["email", "full_name", "role", "status", "is_active", "is_deleted", "created_at"]
     list_filter = ["role", "status", "is_active", "is_deleted", "is_staff"]

@@ -52,6 +52,12 @@
     'Password changed.': 'تم تغيير كلمة المرور.', 'Invalid email or password.': 'البريد أو كلمة المرور غير صحيحة.',
     'This account is disabled.': 'هذا الحساب معطّل.', 'Verify your email address before signing in.': 'أكّد بريدك الإلكتروني قبل تسجيل الدخول.',
     'Validation failed.': 'راجع البيانات المدخلة.', 'Too many requests. Please try again later.': 'محاولات كثيرة. حاول لاحقًا.',
+    'Verification code (staff accounts only)': 'رمز التحقق (لحسابات الفريق فقط)',
+    'Enter the verification code from your authenticator app, or a recovery code.': 'أدخل رمز التحقق من تطبيق المصادقة، أو أحد رموز الاسترداد.',
+    'That verification code is not valid.': 'رمز التحقق غير صحيح.',
+    'Too many failed sign-in attempts. Try again in 15 minutes.': 'محاولات دخول فاشلة كثيرة. حاول بعد ١٥ دقيقة.',
+    'Team accounts sign in with email, password and a verification code.': 'حسابات الفريق تدخل بالبريد وكلمة المرور ورمز التحقق.',
+    'Two-step verification is required for team accounts. Set it up at /account/mfa/enroll/ first.': 'التحقق بخطوتين مطلوب لحسابات الفريق. فعّله أولًا من /account/mfa/enroll/',
     'Switch language': 'English', 'Switch theme': 'تبديل المظهر', 'Back to the site': 'العودة للموقع', 'Account': 'الحساب',
     discovery: 'تحديد احتياج', consultation: 'استشارة', contact: 'تواصل',
     pending_review: 'بانتظار مراجعة الفريق', in_review: 'قيد المراجعة', needs_information: 'نحتاج معلومات إضافية',
@@ -209,7 +215,8 @@
 
   function viewLogin() {
     var f = form([field('email', 'Email', 'email', { autocomplete: 'email', required: 'required' }),
-      field('password', 'Password', 'password', { autocomplete: 'current-password', required: 'required' })],
+      field('password', 'Password', 'password', { autocomplete: 'current-password', required: 'required' }),
+      field('code', 'Verification code (staff accounts only)', 'text', { autocomplete: 'one-time-code' })],
       function (d) {
         return api('/auth/login/', { method: 'POST', body: d, anon: true }).then(function (j) {
           store.set(j.data.access, j.data.refresh); me = j.data.user; location.hash = '#dashboard';

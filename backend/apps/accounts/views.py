@@ -19,6 +19,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from apps.core.exceptions import envelope
 from apps.core.negotiation import IgnoreClientContentNegotiation
+from apps.security import gate
+from apps.security import service as mfa_service
 
 from . import services
 from .serializers import (
@@ -77,9 +79,16 @@ class LoginView(_Public):
         responses={200: OpenApiTypes.OBJECT, 401: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
     )
     def post(self, request):
+        email = str(request.data.get("email", "")).strip().lower()
+        try:
+            gate.ensure_not_locked(email)
+        except gate.Refused as refused:
+            return envelope(refused.message, {"code": refused.code}, refused.status)
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             codes = {c.code for errs in serializer.errors.values() for c in errs}
+            if "authentication" in codes or "disabled" in codes:
+                gate.password_failed(email)
             if "authentication" in codes or "disabled" in codes:
                 return envelope(
                     "Invalid email or password." if "authentication" in codes else "This account is disabled.",
@@ -90,6 +99,10 @@ class LoginView(_Public):
         user = serializer.validated_data["user"]
         if settings.REQUIRE_EMAIL_VERIFICATION and not services.is_email_verified(user):
             return envelope("Verify your email address before signing in.", {"code": "email_not_verified"}, 403)
+        try:  # entrance 2 (/team and the account portal): the second factor comes in the same request
+            gate.second_factor(email, user, request.data.get("code", ""))
+        except gate.Refused as refused:
+            return envelope(refused.message, {"code": refused.code}, refused.status)
         user.last_login = timezone.now()
         user.save(update_fields=["last_login"])
         return Response(
@@ -248,6 +261,18 @@ class GoogleCallbackView(_Public):
             if browser:
                 return HttpResponseRedirect(f"{settings.SITE_URL}/account/?error=google")
             return envelope(str(exc), None, 400)
+        # Entrance 4: Google sign-in has no place for a code, so owner/staff who need a second factor (or are locked
+        # out) must use email + password + code instead. Customers are not affected.
+        try:
+            gate.ensure_not_locked(user.email)
+            if mfa_service.second_factor_needed(user) or mfa_service.enrollment_required(user):
+                raise gate.Refused(
+                    "mfa_use_password", "Team accounts sign in with email, password and a verification code."
+                )
+        except gate.Refused as refused:
+            if browser:
+                return HttpResponseRedirect(f"{settings.SITE_URL}/account/?error=staff_mfa")
+            return envelope(refused.message, {"code": refused.code}, refused.status)
         tokens = services.issue_tokens(user)
         if browser:
             fragment = f"access={tokens['access']}&refresh={tokens['refresh']}"

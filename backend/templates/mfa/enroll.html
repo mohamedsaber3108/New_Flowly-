@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Two-step verification | Flowly</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f6f6f4; color: #1b1b1b; }
+    main { max-width: 34rem; margin: 2rem auto; padding: 0 1rem; }
+    form, .box { background: #fff; border: 1px solid #d8d8d2; border-radius: .5rem; padding: 1rem; margin: 1rem 0; }
+    label { display: block; margin: .75rem 0 .25rem; font-weight: 600; }
+    input[type=email], input[type=password], input[type=text] { width: 100%; box-sizing: border-box; padding: .6rem; font-size: 1rem; }
+    button { margin-top: 1rem; padding: .7rem 1.2rem; font-size: 1rem; }
+    code, pre { font-size: 1.05rem; word-break: break-all; white-space: pre-wrap; }
+    .err { color: #9b1c1c; font-weight: 600; }
+    a { color: #0b4fb3; }
+  </style>
+</head>
+<body>
+<main id="main" tabindex="-1">
+  <h1>Two-step verification</h1>
+  <p>For owner and staff accounts. You need an authenticator app (any app that supports 6-digit time codes).</p>
+  {% if error %}<p class="err" role="alert">{{ error }}</p>{% endif %}
+
+  {% if step == "credentials" %}
+    <form method="post" action="/account/mfa/enroll/">
+      {% csrf_token %}
+      <input type="hidden" name="step" value="credentials">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Continue</button>
+    </form>
+    <p>Already set up? <a href="javascript:history.back()">Go back and sign in</a>.</p>
+  {% elif step == "confirm" %}
+    <div class="box">
+      <p><strong>Step 1.</strong> Add this account to your authenticator app. Use "enter a setup key" and type or paste this key:</p>
+      <p><code id="secret">{{ secret }}</code></p>
+      <p>Or open this link on the phone that has the app: <a href="{{ uri }}">add to authenticator</a>.</p>
+      <p>Account name: Flowly. Type: time-based. Digits: 6.</p>
+    </div>
+    <form method="post" action="/account/mfa/enroll/">
+      {% csrf_token %}
+      <input type="hidden" name="step" value="confirm">
+      <p><strong>Step 2.</strong> Type the 6-digit code the app shows now.</p>
+      <label for="code">Verification code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" required>
+      <button type="submit">Turn on two-step verification</button>
+    </form>
+  {% elif step == "done" %}
+    <div class="box">
+      <p><strong>Two-step verification is on.</strong></p>
+      <p>Save these recovery codes somewhere safe. Each one works once, if you lose your phone. They are shown only now.</p>
+      <pre id="codes">{% for c in codes %}{{ c }}
+{% endfor %}</pre>
+      <p><a href="/account/">Back to sign in</a></p>
+    </div>
+  {% endif %}
+</main>
+</body>
+</html>
