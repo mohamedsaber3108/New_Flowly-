@@ -168,6 +168,6 @@ jobs:
       - name: pnpm audit
         if: ${{ !cancelled() }}
         working-directory: frontend
-        # Documented ignore: GHSA-mrhx-c7xc-m3w5 affects zod 3.25.76 (a production dependency) and is fixed only in
-        # zod 4.6.6, a MAJOR bump that changes the API. Not done in this PR; remove the flag when zod 4 lands.
-        run: pnpm audit --audit-level high --ignore GHSA-mrhx-c7xc-m3w5
+        # No ignore: the zod advisory (GHSA-mrhx-c7xc-m3w5) is fixed by zod 4.6.6. Add a documented ignore only for a
+        # new advisory that has no fix yet.
+        run: pnpm audit --audit-level high
