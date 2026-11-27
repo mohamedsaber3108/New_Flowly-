@@ -17,19 +17,20 @@ class StaffAdminAuthenticationForm(AdminAuthenticationForm):
 
     def clean(self):
         email = (self.data.get("username") or "").strip().lower()
+        ip = gate.ip_of(self.request)
         try:
-            gate.ensure_not_locked(email)
+            gate.ensure_not_locked(email, ip)
         except gate.Refused as refused:
             raise ValidationError(refused.message, code=refused.code)
         try:
             cleaned = super().clean()  # checks the password and that the account may use the admin
         except ValidationError:
-            gate.password_failed(email)
+            gate.password_failed(email, ip)
             raise
         user = self.get_user()
         if user is not None:
             try:
-                gate.second_factor(email, user, self.cleaned_data.get("otp", ""))
+                gate.second_factor(email, ip, user, self.cleaned_data.get("otp", ""))
             except gate.Refused as refused:
                 self.user_cache = None
                 raise ValidationError(refused.message, code=refused.code)

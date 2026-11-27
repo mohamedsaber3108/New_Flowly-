@@ -30,6 +30,7 @@ from .serializers import (
     GoogleCallbackSerializer,
     LoginSerializer,
     LogoutSerializer,
+    MfaAwareRefreshSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     ProfileUpdateSerializer,
@@ -79,16 +80,19 @@ class LoginView(_Public):
         responses={200: OpenApiTypes.OBJECT, 401: OpenApiTypes.OBJECT, 403: OpenApiTypes.OBJECT},
     )
     def post(self, request):
+        if not isinstance(request.data, dict):  # e.g. a JSON list: a normal 400, not a 500
+            return envelope("Send a JSON object with email and password.", {"code": "bad_body"}, 400)
         email = str(request.data.get("email", "")).strip().lower()
+        ip = gate.ip_of(request)
         try:
-            gate.ensure_not_locked(email)
+            gate.ensure_not_locked(email, ip)
         except gate.Refused as refused:
             return envelope(refused.message, {"code": refused.code}, refused.status)
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             codes = {c.code for errs in serializer.errors.values() for c in errs}
             if "authentication" in codes or "disabled" in codes:
-                gate.password_failed(email)
+                gate.password_failed(email, ip)
             if "authentication" in codes or "disabled" in codes:
                 return envelope(
                     "Invalid email or password." if "authentication" in codes else "This account is disabled.",
@@ -100,7 +104,7 @@ class LoginView(_Public):
         if settings.REQUIRE_EMAIL_VERIFICATION and not services.is_email_verified(user):
             return envelope("Verify your email address before signing in.", {"code": "email_not_verified"}, 403)
         try:  # entrance 2 (/team and the account portal): the second factor comes in the same request
-            gate.second_factor(email, user, request.data.get("code", ""))
+            second_factor_proven = gate.second_factor(email, ip, user, request.data.get("code", ""))
         except gate.Refused as refused:
             return envelope(refused.message, {"code": refused.code}, refused.status)
         user.last_login = timezone.now()
@@ -109,7 +113,7 @@ class LoginView(_Public):
             {
                 "message": "Signed in.",
                 "data": {
-                    **services.issue_tokens(user),
+                    **services.issue_tokens(user, mfa=second_factor_proven),
                     "user": UserSerializer(user, context={"request": request}).data,
                 },
             }
@@ -134,6 +138,7 @@ class LogoutView(GenericAPIView):
 class RefreshView(TokenRefreshView):
     authentication_classes: list = []
     permission_classes = [AllowAny]
+    serializer_class = MfaAwareRefreshSerializer
 
     @extend_schema(tags=AUTH, summary="Exchange a refresh token for a new access token")
     def post(self, request, *args, **kwargs):
@@ -264,7 +269,7 @@ class GoogleCallbackView(_Public):
         # Entrance 4: Google sign-in has no place for a code, so owner/staff who need a second factor (or are locked
         # out) must use email + password + code instead. Customers are not affected.
         try:
-            gate.ensure_not_locked(user.email)
+            gate.ensure_not_locked(user.email, gate.ip_of(request))
             if mfa_service.second_factor_needed(user) or mfa_service.enrollment_required(user):
                 raise gate.Refused(
                     "mfa_use_password", "Team accounts sign in with email, password and a verification code."

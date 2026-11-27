@@ -24,7 +24,7 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
             self.message_user(request, "Only an owner can reset two-step verification.", level="error")
             return
         for user in queryset:
-            mfa_service.reset_device(user)
+            mfa_service.reset_device(user, by=f"{request.user.email} (admin action)")
         self.message_user(request, f"Two-step verification reset for {queryset.count()} user(s).")
 
     list_display = ["email", "full_name", "role", "status", "is_active", "is_deleted", "created_at"]

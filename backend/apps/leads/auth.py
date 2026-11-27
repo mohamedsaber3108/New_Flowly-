@@ -30,7 +30,9 @@ class AdminTokenAuthentication(BaseAuthentication):
         return "Bearer"
 
     def authenticate(self, request):
-        if not settings.ALLOW_SHARED_ADMIN_TOKEN:
+        # The shared key has no second factor, so it stops working the moment two-step verification is required,
+        # even when ALLOW_SHARED_ADMIN_TOKEN is on (FL-09).
+        if not settings.ALLOW_SHARED_ADMIN_TOKEN or settings.REQUIRE_STAFF_MFA:
             return None
         expected = settings.ADMIN_TOKEN or ""
         header = request.META.get("HTTP_AUTHORIZATION", "")

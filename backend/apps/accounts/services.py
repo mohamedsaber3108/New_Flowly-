@@ -27,8 +27,12 @@ GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 STATE_SALT = "flowly.google.oauth.state"
 
 
-def issue_tokens(user):
+def issue_tokens(user, mfa=False):
+    """A token pair. `mfa=True` puts an "mfa" claim in the refresh token (and so in every access token made from it):
+    the person proved a second factor at sign-in. Refresh keeps the claim when it rotates the token."""
     refresh = RefreshToken.for_user(user)
+    if mfa:
+        refresh["mfa"] = True
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 

@@ -11,6 +11,7 @@ which every authenticator app accepts and which also works with a screen reader.
 import base64
 import hashlib
 import hmac
+import logging
 import secrets
 import struct
 import time
@@ -22,6 +23,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.utils import timezone
 
+from .events import log_event
 from .models import MfaDevice, RecoveryCode
 
 STEP_SECONDS = 30
@@ -151,6 +153,7 @@ def start_enrollment(user):
     MfaDevice.objects.update_or_create(
         user=user, defaults={"secret": encrypt_secret(secret), "confirmed_at": None, "last_step": 0}
     )
+    log_event("mfa.enrol_started", user_id=user.pk, email=user.email)
     return secret, otpauth_uri(user, secret)
 
 
@@ -169,13 +172,16 @@ def confirm_enrollment(user, code):
         device.save(update_fields=["confirmed_at", "last_step"])
         RecoveryCode.objects.filter(user=user).delete()
         RecoveryCode.objects.bulk_create([RecoveryCode(user=user, digest=_digest(c)) for c in codes])
+    log_event("mfa.enrol_confirmed", user_id=user.pk, email=user.email)
     return codes
 
 
-def reset_device(user):
-    """Owner action: remove the device and recovery codes so the user can enrol again."""
+def reset_device(user, by=""):
+    """Owner action (or the break-glass command): remove the device and recovery codes so the user can enrol again.
+    `by` says who did it, for the log line."""
     MfaDevice.objects.filter(user=user).delete()
     RecoveryCode.objects.filter(user=user).delete()
+    log_event("mfa.reset", level=logging.WARNING, user_id=user.pk, email=user.email, by=by)
 
 
 # --- sign-in check -----------------------------------------------------------------------------------------------

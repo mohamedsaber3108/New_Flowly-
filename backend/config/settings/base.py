@@ -232,6 +232,9 @@ MFA_ENCRYPTION_KEY = config("MFA_ENCRYPTION_KEY", default="")
 # 5 failed sign-ins within 15 minutes lock that account's sign-in for 15 minutes, on every entrance.
 LOGIN_LOCKOUT_ATTEMPTS = config("LOGIN_LOCKOUT_ATTEMPTS", default=5, cast=int)
 LOGIN_LOCKOUT_SECONDS = config("LOGIN_LOCKOUT_SECONDS", default=900, cast=int)
+# ... per email AND per IP address (5), plus a cap per IP across all emails (20) and one per email across all IPs (50).
+LOGIN_LOCKOUT_IP_ATTEMPTS = config("LOGIN_LOCKOUT_IP_ATTEMPTS", default=20, cast=int)
+LOGIN_LOCKOUT_EMAIL_ATTEMPTS = config("LOGIN_LOCKOUT_EMAIL_ATTEMPTS", default=50, cast=int)
 # Django admin sessions of staff: signed out after 30 minutes without a request, and after 8 hours in all.
 ADMIN_SESSION_IDLE_SECONDS = config("ADMIN_SESSION_IDLE_SECONDS", default=1800, cast=int)
 ADMIN_SESSION_MAX_SECONDS = config("ADMIN_SESSION_MAX_SECONDS", default=28800, cast=int)

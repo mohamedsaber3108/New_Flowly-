@@ -1,3 +1,5 @@
+import logging
+
 from django.apps import AppConfig
 from django.core import checks
 
@@ -13,6 +15,21 @@ class SecurityConfig(AppConfig):
 
         admin.site.login_form = StaffAdminAuthenticationForm  # the admin sign-in page asks for the code
         checks.register(check_mfa_settings)
+        warn_if_shared_key_conflicts()
+
+
+def warn_if_shared_key_conflicts():
+    """Both switches on is a mistake worth a line in the log: the shared key is ignored while MFA is required."""
+    from django.conf import settings
+
+    from .events import log_event
+
+    if settings.REQUIRE_STAFF_MFA and settings.ALLOW_SHARED_ADMIN_TOKEN:
+        log_event(
+            "config.conflict",
+            level=logging.WARNING,
+            detail="ALLOW_SHARED_ADMIN_TOKEN and REQUIRE_STAFF_MFA are both on: the shared admin key is refused.",
+        )
 
 
 def check_mfa_settings(app_configs, **kwargs):

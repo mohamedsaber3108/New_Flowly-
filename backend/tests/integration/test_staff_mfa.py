@@ -5,8 +5,10 @@ Entrances: (1) Django admin login page, (2) API login /api/v1/auth/login/ (used 
 """
 
 import base64
+import json
 import logging
 import time
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -16,14 +18,17 @@ from django.contrib import admin as django_admin
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import Client
 from django.test import RequestFactory as DjangoRequestFactory
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from apps.accounts.admin import UserAdmin
 from apps.accounts.models import User
 from apps.security import lockout, service
-from apps.security.apps import check_mfa_settings
+from apps.security.apps import check_mfa_settings, warn_if_shared_key_conflicts
 from apps.security.middleware import LAST_SEEN, STARTED
 from apps.security.models import MfaDevice, RecoveryCode
 from tests.factories import PASSWORD, OwnerFactory, StaffFactory, UserFactory
@@ -57,11 +62,15 @@ def fresh_code(user):
     return service.totp_now(service.decrypt_secret(user.mfa_device.secret))
 
 
-def api_login(email, password=PASSWORD, code=None):
+IP_A = "203.0.113.10"
+IP_B = "203.0.113.20"
+
+
+def api_login(email, password=PASSWORD, code=None, ip="127.0.0.1"):
     body = {"email": email, "password": password}
     if code is not None:
         body["code"] = code
-    return APIClient().post(f"{V1}/auth/login/", body, format="json")
+    return APIClient().post(f"{V1}/auth/login/", body, format="json", REMOTE_ADDR=ip)
 
 
 def admin_login(client, email, password=PASSWORD, otp=""):
@@ -253,7 +262,7 @@ def test_failures_on_different_entrances_count_together():
     client = Client()
     for _ in range(2):
         admin_login(client, staff.email, password="Wrong-Password-1!")
-    assert lockout.is_locked(staff.email)
+    assert lockout.is_locked(staff.email, "127.0.0.1")
     assert api_login(staff.email).status_code == 429
     assert admin_login(client, staff.email).status_code == 200 and not signed_in(client)
 
@@ -451,3 +460,154 @@ def test_the_admin_login_page_says_why_the_session_ended():
 def test_a_secret_that_cannot_be_decrypted_is_a_configuration_error_not_a_pass():
     with pytest.raises(ImproperlyConfigured):
         service.decrypt_secret("not-a-token")
+
+
+# --- review round 1 -----------------------------------------------------------------------------------------
+
+
+def refresh_with(refresh_token):
+    return APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh_token}, format="json")
+
+
+def test_a_staff_refresh_token_from_before_the_switch_is_refused_after_it(settings):
+    staff = StaffFactory()
+    enrol(staff)
+    old = api_login(staff.email, code=fresh_code(staff)).json()["data"]["refresh"]  # rule off: no second factor asked?
+    assert refresh_with(old).status_code == 200  # the rule is off, so refresh works
+
+    # A token issued without any second factor (rule off, never enrolled): the case the reviewer described.
+    plain_staff = StaffFactory()
+    before_switch = api_login(plain_staff.email).json()["data"]["refresh"]
+    assert refresh_with(before_switch).status_code == 200  # still fine while the rule is off
+
+    settings.REQUIRE_STAFF_MFA = True
+    refused = refresh_with(before_switch)
+    assert refused.status_code == 401
+    assert "access" not in refused.content.decode()
+
+
+def test_a_refresh_token_from_a_code_sign_in_keeps_working_and_rotation_keeps_the_claim(require):
+    staff = StaffFactory()
+    enrol(staff)
+    tokens = api_login(staff.email, code=fresh_code(staff)).json()["data"]
+    first = refresh_with(tokens["refresh"])
+    assert first.status_code == 200
+    rotated = first.json()["data"]["refresh"]
+    assert RefreshToken(rotated)["mfa"] is True and AccessToken(first.json()["data"]["access"])["mfa"] is True
+    assert refresh_with(rotated).status_code == 200  # a rotated token still refreshes
+
+
+def test_customers_refresh_tokens_are_not_affected_by_the_rule(require):
+    tokens = api_login(UserFactory().email).json()["data"]
+    assert refresh_with(tokens["refresh"]).status_code == 200
+
+
+def test_the_shared_admin_key_is_refused_while_mfa_is_required_even_if_it_is_allowed(settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
+    header = {"HTTP_AUTHORIZATION": f"Bearer {settings.ADMIN_TOKEN}"}
+    team_urls = ["/api/v1/admin/requests/", "/api/v1/admin/stats/", "/api/admin/requests"]
+    assert [APIClient().get(u, **header).status_code for u in team_urls] == [200, 200, 200]  # allowed, rule off
+    assert APIClient().get("/api/health").json()["sharedAdminToken"] is True
+
+    settings.REQUIRE_STAFF_MFA = True
+    assert [APIClient().get(u, **header).status_code for u in team_urls] == [401, 401, 401]  # both on: refused
+    assert APIClient().get("/api/health").json()["sharedAdminToken"] is False
+
+
+def test_a_warning_is_logged_when_the_shared_key_and_the_mfa_rule_are_both_on(settings, caplog):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
+    settings.REQUIRE_STAFF_MFA = True
+    with caplog.at_level(logging.WARNING, logger="flowly.security"):
+        warn_if_shared_key_conflicts()
+    assert "config.conflict" in caplog.text and settings.ADMIN_TOKEN not in caplog.text
+
+
+@pytest.mark.parametrize("body", [[], ["a"], "text", 5])
+def test_login_with_a_body_that_is_not_an_object_is_a_400_not_a_500(body):
+    response = APIClient().post(f"{V1}/auth/login/", body, format="json")
+    assert response.status_code == 400
+    assert set(response.json()) == {"success", "data", "message", "errors"} and response.json()["success"] is False
+
+
+@pytest.mark.parametrize("path", ["enroll", "confirm"])
+def test_enrolment_api_with_a_body_that_is_not_an_object_is_a_400(path):
+    assert APIClient().post(f"{V1}/auth/mfa/{path}/", [], format="json").status_code == 400
+
+
+def test_failures_from_one_address_do_not_lock_the_same_email_from_another_address():
+    user = UserFactory()
+    for _ in range(5):
+        assert api_login(user.email, password="Wrong-Password-1!", ip=IP_A).status_code == 401
+    assert api_login(user.email, ip=IP_A).status_code == 429  # locked from A
+    assert api_login(user.email, ip=IP_B).status_code == 200  # but not from B
+
+
+def test_the_same_rule_holds_on_the_admin_login_page():
+    staff = StaffFactory()
+    client = Client()
+    for _ in range(5):
+        client.post(ADMIN_LOGIN, {"username": staff.email, "password": "x", "otp": ""}, REMOTE_ADDR=IP_A)
+    from_a = client.post(ADMIN_LOGIN, {"username": staff.email, "password": PASSWORD, "otp": ""}, REMOTE_ADDR=IP_A)
+    assert from_a.status_code == 200 and b"Too many failed sign-in attempts" in from_a.content
+    other = Client()
+    assert other.post(ADMIN_LOGIN, {"username": staff.email, "password": PASSWORD}, REMOTE_ADDR=IP_B).status_code == 302
+
+
+def test_one_address_failing_across_many_emails_is_locked_by_the_per_ip_cap(settings):
+    settings.LOGIN_LOCKOUT_IP_ATTEMPTS = 6
+    for n in range(6):
+        api_login(f"nobody{n}@example.test", password="x", ip=IP_A)  # one failure each: no pair reaches 5
+    assert api_login(UserFactory().email, ip=IP_A).status_code == 429
+    assert api_login(UserFactory().email, ip=IP_B).status_code == 200
+
+
+def test_one_email_failing_from_many_addresses_is_locked_by_the_per_email_cap(settings):
+    settings.LOGIN_LOCKOUT_EMAIL_ATTEMPTS = 6
+    user = UserFactory()
+    for n in range(6):
+        api_login(user.email, password="Wrong-Password-1!", ip=f"198.51.100.{n + 1}")
+    assert api_login(user.email, ip=IP_B).status_code == 429
+
+
+def security_events(caplog):
+    return [
+        json.loads(r.getMessage().split("security_event ", 1)[1])
+        for r in caplog.records
+        if r.name == "flowly.security" and "security_event" in r.getMessage()
+    ]
+
+
+def test_enrol_confirm_reset_and_lockout_write_structured_log_lines_without_secrets(caplog):
+    caplog.set_level(logging.INFO, logger="flowly.security")
+    staff, owner = StaffFactory(), OwnerFactory()
+    secret, codes = enrol(staff)
+    service.reset_device(staff, by=owner.email)
+    for _ in range(5):
+        api_login(staff.email, password="Wrong-Password-1!", ip=IP_A)
+    events = security_events(caplog)
+    names = [e["event"] for e in events]
+    assert names[:3] == ["mfa.enrol_started", "mfa.enrol_confirmed", "mfa.reset"]
+    assert "signin.locked" in names
+    reset = next(e for e in events if e["event"] == "mfa.reset")
+    assert reset["by"] == owner.email and reset["email"] == staff.email and reset["user_id"] == staff.pk
+    text = caplog.text
+    assert secret not in text and not any(c in text for c in codes) and "Wrong-Password-1!" not in text
+
+
+def test_break_glass_command_resets_one_account_and_logs_it(caplog):
+    caplog.set_level(logging.INFO, logger="flowly.security")
+    owner = OwnerFactory()
+    enrol(owner)
+    out = StringIO()
+    call_command("reset_staff_mfa", "--email", owner.email.upper(), stdout=out)
+    assert "reset for" in out.getvalue() and not service.has_confirmed_device(owner)
+    reset = next(e for e in security_events(caplog) if e["event"] == "mfa.reset")
+    assert reset["by"] == "management command reset_staff_mfa"
+    assert service.start_enrollment(owner)  # can enrol again
+
+
+def test_break_glass_command_refuses_unknown_and_customer_accounts():
+    with pytest.raises(CommandError):
+        call_command("reset_staff_mfa", "--email", "nobody@example.test")
+    with pytest.raises(CommandError):
+        call_command("reset_staff_mfa", "--email", UserFactory().email)

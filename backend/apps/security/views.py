@@ -29,11 +29,12 @@ SESSION_SECONDS = 600  # the page step must be finished within 10 minutes
 
 def _team_user_for_password(request, email, password):
     """The user if the password is right and the account may enrol. Raises gate.Refused otherwise."""
-    email = (email or "").strip().lower()
-    gate.ensure_not_locked(email)
-    user = authenticate(request, username=email, password=password or "")
+    email = str(email or "").strip().lower()
+    ip = gate.ip_of(request)
+    gate.ensure_not_locked(email, ip)
+    user = authenticate(request, username=email, password=str(password or ""))
     if user is None or getattr(user, "is_deleted", False) or not user.is_active:
-        gate.password_failed(email)
+        gate.password_failed(email, ip)
         raise gate.Refused("invalid_credentials", "Invalid email or password.", 401)
     if not service.is_team_user(user):
         raise gate.Refused("not_team", "Two-step verification is only for owner and staff accounts.", 403)
@@ -53,6 +54,8 @@ class EnrollApiView(APIView):
     throttle_scope = "auth_login"
 
     def post(self, request):
+        if not isinstance(request.data, dict):
+            return envelope("Send a JSON object with email and password.", {"code": "bad_body"}, 400)
         try:
             user = _team_user_for_password(request, request.data.get("email"), request.data.get("password"))
             try:
@@ -77,6 +80,8 @@ class ConfirmApiView(APIView):
     throttle_scope = "auth_login"
 
     def post(self, request):
+        if not isinstance(request.data, dict):
+            return envelope("Send a JSON object with email, password and code.", {"code": "bad_body"}, 400)
         try:
             user = _team_user_for_password(request, request.data.get("email"), request.data.get("password"))
             try:
@@ -86,7 +91,7 @@ class ConfirmApiView(APIView):
             except ImproperlyConfigured:
                 raise _not_configured()
             if codes is None:
-                gate.password_failed(user.email)  # a wrong code counts like a wrong password
+                gate.password_failed(user.email, gate.ip_of(request))  # a wrong code counts like a wrong password
                 return envelope("That verification code is not valid.", {"code": "mfa_invalid"}, 400)
         except gate.Refused as refused:
             return envelope(refused.message, {"code": refused.code}, refused.status)
@@ -136,14 +141,14 @@ class EnrollPageView(View):
         if user is None or int(time.time()) - started > SESSION_SECONDS:
             return self._page(request, "credentials", error="The setup took too long. Start again.")
         try:
-            gate.ensure_not_locked(user.email)
+            gate.ensure_not_locked(user.email, gate.ip_of(request))
             codes = service.confirm_enrollment(user, request.POST.get("code"))
         except gate.Refused as refused:
             return self._page(request, "credentials", error=refused.message, status=refused.status)
         except (service.NotEnrolling, ImproperlyConfigured):
             return self._page(request, "credentials", error="Start the setup again.")
         if codes is None:
-            gate.password_failed(user.email)
+            gate.password_failed(user.email, gate.ip_of(request))
             return self._page(
                 request,
                 "confirm",
