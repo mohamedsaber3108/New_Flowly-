@@ -1,6 +1,7 @@
 """Structured security log lines (logger "flowly.security"). One JSON object per line, never a secret.
 
-Used until the audit log (PR #6) is merged: a follow-up (FL-09b) moves them into it.
+Each of these events is ALSO written to the audit log (FL-09b: `audit.record` in service.py and lockout.py); the log
+line stays as an operations log that can be read on the server.
 Allowed fields are plain facts: event name, user id, email of a KNOWN account, IP address, who did it.
 Text that a visitor typed into the email box is never logged as typed: it can be a password pasted by mistake.
 Use mask_email() for it.

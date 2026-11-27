@@ -18,6 +18,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.core.utils import send_template_email
 
+from . import session_limits
+
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
@@ -27,12 +29,17 @@ GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo"
 STATE_SALT = "flowly.google.oauth.state"
 
 
-def issue_tokens(user, mfa=False):
+def issue_tokens(user, mfa=False, team_session=False):
     """A token pair. `mfa=True` puts an "mfa" claim in the refresh token (and so in every access token made from it):
-    the person proved a second factor at sign-in. Refresh keeps the claim when it rotates the token."""
+    the person proved a second factor at sign-in. Refresh keeps the claim when it rotates the token.
+    `team_session=True` (owner, staff, viewer: the cookie sign-in) adds `auth_time` and `sid`, which carry the idle
+    and the 8-hour limits (apps/accounts/session_limits.py); customers get neither."""
     refresh = RefreshToken.for_user(user)
     if mfa:
         refresh["mfa"] = True
+    if team_session:
+        for name, value in session_limits.new_session_claims().items():
+            refresh[name] = value
     return {"access": str(refresh.access_token), "refresh": str(refresh)}
 
 
