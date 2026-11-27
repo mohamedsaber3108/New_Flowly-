@@ -4,6 +4,13 @@ TEAM_ROLES = ("owner", "staff")
 READ_ROLES = ("owner", "staff", "viewer")
 
 
+def _audit_denied(request, view):
+    """Log a refused team call (best effort: a failed audit write never changes the 401/403 answer)."""
+    from apps.audit import service as audit
+
+    audit.record_denied(request, view)
+
+
 def has_role(user, roles):
     return bool(
         user
@@ -19,7 +26,10 @@ class IsOwnerOrStaff(BasePermission):
     message = "Team access is required."
 
     def has_permission(self, request, view):
-        return has_role(request.user, TEAM_ROLES)
+        allowed = has_role(request.user, TEAM_ROLES)
+        if not allowed:
+            _audit_denied(request, view)
+        return allowed
 
 
 class IsTeamReadOrWrite(BasePermission):
@@ -29,4 +39,7 @@ class IsTeamReadOrWrite(BasePermission):
 
     def has_permission(self, request, view):
         roles = READ_ROLES if request.method in SAFE_METHODS else TEAM_ROLES
-        return has_role(request.user, roles)
+        allowed = has_role(request.user, roles)
+        if not allowed:
+            _audit_denied(request, view)
+        return allowed

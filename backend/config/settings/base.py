@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.leads",
+    "apps.audit",
 ]
 
 MIDDLEWARE = [
@@ -55,6 +56,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "allauth.account.middleware.AccountMiddleware",
+    "apps.audit.context.AuditContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -230,6 +232,8 @@ CACHES = {
 
 # --- Flowly business settings ----------------------------------------------
 ADMIN_TOKEN = config("ADMIN_TOKEN", default="")  # legacy /team bearer token (>= 32 chars)
+# Where `manage.py export_audit_log` writes its daily JSONL + SHA-256 files (a folder on the app server).
+AUDIT_EXPORT_DIR = config("AUDIT_EXPORT_DIR", default=str(BASE_DIR / "audit_exports"))
 # The shared ADMIN_TOKEN is ignored (401) unless this is True. Default off: team members sign in with a named account.
 ALLOW_SHARED_ADMIN_TOKEN = config("ALLOW_SHARED_ADMIN_TOKEN", default=False, cast=bool)
 TEAM_NOTIFY_EMAIL = config("TEAM_NOTIFY_EMAIL", default="")
