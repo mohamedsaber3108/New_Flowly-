@@ -11,6 +11,18 @@ from apps.leads.models import Request, RequestEvent
 from tests.factories import StaffFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def shared_key_allowed(settings):
+    """These tests cover the original /team contract, which signs in with the shared ADMIN_TOKEN.
+
+    FL-08 turns that off by default (ALLOW_SHARED_ADMIN_TOKEN=False); the off state is tested in test_requests_v1.py
+    and test_permission_matrix.py.
+    """
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
+
+
 ORIGIN = "http://testserver"
 TOKEN = "flowly-local-test-admin-token-123456789"
 
@@ -387,9 +399,11 @@ def test_assistant_logging_is_opt_in(api, settings):
 # --- system ---------------------------------------------------------------
 
 
-def test_health_endpoints(api):
+def test_health_endpoints(api, settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = False
     r = api.get("/api/health")
-    assert r.status_code == 200 and r.json() == {"status": "ok", "service": "flowly-web", "storage": "ok"}
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "service": "flowly-web", "storage": "ok", "sharedAdminToken": False}
     r2 = api.get("/health/")
     assert r2.status_code == 200 and r2.json()["success"] is True and r2.json()["data"]["database"] == "ok"
 

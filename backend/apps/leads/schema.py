@@ -11,7 +11,10 @@ class AdminTokenScheme(OpenApiAuthenticationExtension):
         return {
             "type": "http",
             "scheme": "bearer",
-            "description": "Shared ADMIN_TOKEN (min 32 chars) used by the original /team console.",
+            "description": (
+                "Shared ADMIN_TOKEN (min 32 chars) used by the original /team console. "
+                "Ignored unless ALLOW_SHARED_ADMIN_TOKEN=True."
+            ),
         }
 
 
