@@ -6,10 +6,10 @@ from rest_framework import serializers
 
 from apps.core.utils import iso
 
+from . import site_settings
 from .models import Appointment, Request, RequestEvent
 
 REFERENCE_RE = re.compile(r"^FLW-\d{8}-[A-F0-9]{8}$")
-TIME_CHOICES = ["10:00", "11:00", "12:00", "14:00", "15:00"]
 
 
 def _opt(max_length=300):
@@ -50,9 +50,15 @@ class RequestCreateSerializer(serializers.Serializer):
     selectedService = _opt()
     consent = serializers.BooleanField()
     date = serializers.RegexField(r"^\d{4}-\d{2}-\d{2}$", allow_null=True, required=False, default=None)
-    time = serializers.ChoiceField(choices=TIME_CHOICES, allow_null=True, required=False, default=None)
+    time = serializers.CharField(allow_null=True, required=False, default=None, max_length=5)
     timezone = serializers.ChoiceField(choices=["Africa/Cairo"])
     language = serializers.ChoiceField(choices=["ar", "en"])
+
+    def validate_time(self, value):
+        """One of the time slots set in the site settings (default 10:00, 11:00, 12:00, 14:00, 15:00)."""
+        if value is not None and value not in site_settings.get().slot_times:
+            raise serializers.ValidationError(f'"{value}" is not a valid choice.')
+        return value
 
     def validate_consent(self, value):
         if value is not True:
@@ -247,15 +253,15 @@ def legacy_row(req):
 
 
 def valid_future_date(value: str) -> bool:
-    """Same rule as the frontend: after today, within 90 days, not Friday/Saturday (Cairo)."""
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
+    """After today (Cairo), within the booking horizon, on a booking weekday and not a blocked day.
 
+    The days, the horizon and the blocked dates come from the site settings (admin). Their defaults are the old rule:
+    within 90 days, Sunday to Thursday, nothing blocked.
+    """
     try:
         parsed = date_cls.fromisoformat(value)
     except ValueError:
         return False
     if parsed.isoformat() != value:
         return False
-    today = datetime.now(ZoneInfo("Africa/Cairo")).date()
-    return today < parsed <= today + timedelta(days=90) and parsed.weekday() not in (4, 5)
+    return site_settings.is_bookable_date(parsed)

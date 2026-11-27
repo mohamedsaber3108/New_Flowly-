@@ -7,3 +7,4 @@ class LeadsConfig(AppConfig):
 
     def ready(self):
         from . import schema  # noqa: F401
+        from . import site_settings  # noqa: F401  (registers the signals that clear the settings cache)
