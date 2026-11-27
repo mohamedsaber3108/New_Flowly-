@@ -47,7 +47,8 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements/*.txt
       - name: Install dependencies
-        run: pip install -r requirements/test.txt
+        # test.txt has no Postgres driver (it is only in production.txt), so pin the same one here.
+        run: pip install -r requirements/test.txt "psycopg[binary]==3.2.12"
       - name: flake8
         if: ${{ !cancelled() }}
         run: flake8 .
