@@ -1,0 +1,12 @@
+# Gitleaks configuration: the default rules, plus one narrow exception.
+[extend]
+useDefault = true
+
+# A fixed UUID used as "requestKey" in a test is the browser's request id, not a secret.
+# The exception needs BOTH: the file is under backend/tests/, and the text matches the "requestKey": "<uuid>" pattern.
+# Nothing else in tests, and nothing outside backend/tests/, is excused by it.
+[[allowlists]]
+description = "requestKey test values (a UUID request id), only under backend/tests/"
+condition = "AND"
+paths = ['''^backend/tests/''']
+regexes = ['''"requestKey"\s*:\s*"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"''']
