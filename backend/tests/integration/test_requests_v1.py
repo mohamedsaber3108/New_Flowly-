@@ -201,10 +201,43 @@ def test_team_stats(staff_client):
     assert data["total"] == 2 and data["by_status"]["confirmed"] == 1
 
 
-def test_team_endpoints_accept_admin_token(api, settings):
+def test_team_endpoints_accept_admin_token_only_when_allowed(api, settings):
     make_request()
-    r = api.get(f"{V1}/admin/requests/", HTTP_AUTHORIZATION=f"Bearer {settings.ADMIN_TOKEN}")
-    assert r.status_code == 200
+    header = {"HTTP_AUTHORIZATION": f"Bearer {settings.ADMIN_TOKEN}"}
+    assert settings.ALLOW_SHARED_ADMIN_TOKEN is False  # FL-08 default: the old key is refused
+    assert api.get(f"{V1}/admin/requests/", **header).status_code == 401
+    assert api.get("/api/admin/requests", **header).status_code == 401
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
+    assert api.get(f"{V1}/admin/requests/", **header).status_code == 200
+    assert api.get("/api/admin/requests", **header).status_code == 200
+
+
+def test_team_changes_by_named_staff_always_record_an_actor(api, staff, settings):
+    """FL-08: with the shared key off, every event written through the team routes has a real user."""
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    assert settings.ALLOW_SHARED_ADMIN_TOKEN is False
+    header = {"HTTP_AUTHORIZATION": f"Bearer {RefreshToken.for_user(staff).access_token}"}
+    req = make_request()
+    r1 = api.patch(f"{V1}/admin/requests/{req.reference}/", {"status": "confirmed"}, format="json", **header)
+    r2 = api.patch(f"{V1}/admin/requests/{req.reference}/", {"internal_note": "called"}, format="json", **header)
+    r3 = api.patch(
+        f"/api/admin/requests/{req.reference}", {"status": "proposal_sent", "internalNote": ""}, format="json", **header
+    )
+    assert (r1.status_code, r2.status_code, r3.status_code) == (200, 200, 200)
+    written = RequestEvent.objects.filter(request=req).exclude(event_type="submitted")
+    assert written.count() >= 3
+    assert all(event.actor_id == staff.id for event in written)
+
+
+def test_health_reports_whether_the_shared_key_is_allowed(api, settings):
+    assert api.get("/api/health").json()["sharedAdminToken"] is False
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
+    assert api.get("/api/health").json()["sharedAdminToken"] is True
+    settings.ADMIN_TOKEN = ""  # allowed but no usable key: the field must stay hidden
+    body = api.get("/api/health").json()
+    assert body["sharedAdminToken"] is False
+    assert "ADMIN_TOKEN" not in str(body)
 
 
 def test_team_endpoints_reject_anonymous(api):
@@ -269,6 +302,7 @@ def test_staff_factory_sanity():
 
 
 def test_team_console_history_works_with_admin_token_and_staff_jwt(api, staff, settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
     req = make_request()
     url = f"{V1}/admin/requests/{req.reference}/"
     by_token = api.get(url, HTTP_AUTHORIZATION=f"Bearer {settings.ADMIN_TOKEN}")
