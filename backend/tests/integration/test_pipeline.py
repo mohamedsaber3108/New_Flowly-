@@ -5,6 +5,7 @@ The customer must never see any of the new fields; every team change is audited.
 
 import importlib
 import json
+import uuid
 from datetime import date, timedelta
 from types import SimpleNamespace
 
@@ -97,9 +98,7 @@ def test_the_source_is_saved_when_the_form_sends_it_and_blank_when_not(api, payl
         "email",
         "spring",
     )
-    plain = post_request(
-        api, {**payload, "requestKey": "0b9f1c2e-8d44-4f6a-9a51-3c7d2e5f8a10", "date": None, "time": None}
-    )
+    plain = post_request(api, {**payload, "requestKey": str(uuid.uuid4()), "date": None, "time": None})
     req = Request.objects.get(reference=plain.json()["reference"])
     assert req.source_page == req.utm_source == req.utm_medium == req.utm_campaign == ""
 
