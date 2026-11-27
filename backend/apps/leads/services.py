@@ -5,6 +5,7 @@ import uuid
 from datetime import date as date_cls
 from datetime import datetime
 from datetime import timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -103,11 +104,21 @@ def notify_new_request(req: Request, appointment):
     subject = "استلمنا طلبك في Flowly" if req.language == "ar" else "We received your Flowly request"
     send_template_email(subject, req.email, "emails/request_received.html", ctx)
     if settings.TEAM_NOTIFY_EMAIL:
+        # The alert gets plain facts only, never the request object: no name, email, phone, organization or text.
+        created = req.created_at.astimezone(ZoneInfo("Africa/Cairo")).strftime("%Y-%m-%d %H:%M")
+        alert = {
+            "reference": req.reference,
+            "kind": req.get_kind_display(),
+            "audience": req.get_audience_display(),
+            "created": created,
+            "admin_link": f"{settings.SITE_URL}/{settings.ADMIN_URL}leads/request/{req.pk}/change/",
+            "team_link": f"{settings.FRONTEND_URL}/team",
+        }
         send_template_email(
-            f"New Flowly request {req.reference}",
+            f"New Flowly request {req.reference} / طلب جديد على Flowly",
             [e.strip() for e in settings.TEAM_NOTIFY_EMAIL.split(",") if e.strip()],
             "emails/team_alert.html",
-            ctx,
+            alert,
         )
 
 

@@ -4,6 +4,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.utils import mail_mode
+
 
 class HealthView(APIView):
     """DB ping only. Used by load balancers and the deploy scripts."""
@@ -28,4 +30,5 @@ class HealthView(APIView):
                 },
                 status=503,
             )
-        return Response({"status": "ok", "database": "ok"})
+        # "mail" says only whether mail is really sent by a server ("configured") or only logged ("console").
+        return Response({"status": "ok", "database": "ok", "mail": mail_mode()})
