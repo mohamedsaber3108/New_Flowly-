@@ -155,8 +155,7 @@ class SiteSettings(models.Model):
         "New requests on",
         default=True,
         help_text=(
-            "Off: the public forms show a clear message and save nothing. "
-            "Requests already received are not touched."
+            "Off: the public forms show a clear message and save nothing. " "Requests already received are not touched."
         ),
     )
     booking_weekdays = models.JSONField(

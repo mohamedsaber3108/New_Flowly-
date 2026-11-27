@@ -5,15 +5,9 @@ A check is a small function returning (ok, detail). It runs only a cheap local t
 the page never waits on the outside world.
 """
 
-from django.conf import settings
 from django.db import connection
 
-
-def mail_mode():
-    """ "configured" when a mail server sends the mail, "console" when it only goes to the log or to memory.
-    (The same rule as the mail PR's helper of the same name; keep them equal when both are merged.)"""
-    backend = settings.EMAIL_BACKEND
-    return "console" if any(word in backend for word in ("console", "locmem", "dummy", "filebased")) else "configured"
+from apps.core.utils import mail_mode
 
 
 def _database():
