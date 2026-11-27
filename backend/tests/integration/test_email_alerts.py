@@ -89,6 +89,20 @@ def test_arabic_receipt_is_right_to_left_with_a_text_part(settings):
     assert "وصلتك هذه الرسالة" in html  # the footer is Arabic too
 
 
+@pytest.mark.parametrize("language", ["ar", "en"])
+def test_the_bare_status_url_in_the_receipt_is_isolated_left_to_right(settings, language):
+    """In the Arabic (right-to-left) HTML the plain address must not be reordered by the surrounding text, so it sits
+    in <bdi dir="ltr">. The link text stays as it was, and the text-only part has the same plain address as before."""
+    services.notify_new_request(make_request(language=language), None)
+    receipt = mail.outbox[0]
+    html = receipt.alternatives[0][0]
+    url = f"{settings.FRONTEND_URL}/status"
+    assert f'<bdi dir="ltr">{url}</bdi>' in html
+    assert f'<a href="{url}"' in html  # the clickable link is untouched
+    assert html.count(url) == 2  # the link and the one bare address, nothing more
+    assert url in receipt.body and "bdi" not in receipt.body and "<" not in receipt.body  # text part: plain
+
+
 def test_english_receipt_stays_left_to_right_with_the_same_content():
     req = make_request(language="en")
     services.notify_new_request(req, None)
