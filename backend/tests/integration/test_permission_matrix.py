@@ -82,9 +82,11 @@ def assert_refusal_message(response, url):
 
 @pytest.mark.parametrize("caller", CALLERS)
 @pytest.mark.parametrize("route", ROUTES, ids=[r[0] for r in ROUTES])
-def test_matrix(route, caller, ref):
+def test_matrix(route, caller, ref, settings):
     _, method, template, kind, body = route
     url = template.format(ref=ref)
+    # The shared key only works when the owner switches it on (see test_shared_key_off_* for the default).
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
     response = call(method, url, body, **auth_header(caller))
     expected = EXPECT[kind][caller]
     if expected is True:
@@ -95,7 +97,8 @@ def test_matrix(route, caller, ref):
 
 
 @pytest.mark.parametrize("url", ["/api/admin/requests", "/api/v1/admin/requests/", "/api/v1/admin/stats/"])
-def test_allowed_team_reads_return_200(url):
+def test_allowed_team_reads_return_200(url, settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
     for caller in ("viewer", "staff", "owner", "admin_token"):
         assert call("get", url, **auth_header(caller)).status_code == 200, (url, caller)
 
@@ -146,6 +149,7 @@ TEAM_URLS = ["/api/admin/requests", "/api/v1/admin/requests/", "/api/v1/admin/st
 @pytest.mark.parametrize("url", TEAM_URLS)
 @pytest.mark.parametrize("configured", [None, "", "x" * 31], ids=["unset", "empty", "31-chars"])
 def test_unset_or_short_admin_token_never_authenticates(url, configured, settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True  # even when allowed, a missing or short key is refused
     settings.ADMIN_TOKEN = configured
     for supplied in (configured or "", "x" * 31, "x" * 32):
         response = call("get", url, HTTP_AUTHORIZATION=f"Bearer {supplied}")
@@ -154,10 +158,22 @@ def test_unset_or_short_admin_token_never_authenticates(url, configured, setting
 
 @pytest.mark.parametrize("url", TEAM_URLS)
 def test_admin_token_exactly_32_chars_works_and_wrong_token_does_not(url, settings):
+    settings.ALLOW_SHARED_ADMIN_TOKEN = True
     settings.ADMIN_TOKEN = "k" * 32
     assert call("get", url, HTTP_AUTHORIZATION="Bearer " + "k" * 32).status_code == 200
     assert call("get", url, HTTP_AUTHORIZATION="Bearer " + "k" * 31 + "z").status_code == 401
     assert call("get", url, HTTP_AUTHORIZATION="Basic " + "k" * 32).status_code == 401
+
+
+@pytest.mark.parametrize("route", ROUTES, ids=[r[0] for r in ROUTES])
+def test_shared_key_off_by_default_is_401_everywhere(route, ref, settings):
+    """FL-08: with the default setting, the old key (correct, 39 chars) opens nothing."""
+    from django.conf import settings as live_settings
+
+    assert live_settings.ALLOW_SHARED_ADMIN_TOKEN is False
+    _, method, template, _, body = route
+    response = call(method, template.format(ref=ref), body, **auth_header("admin_token"))
+    assert response.status_code == 401, (template, response.status_code)
 
 
 # --- customers cannot read each other's requests ----------------------------------------------------------------------
