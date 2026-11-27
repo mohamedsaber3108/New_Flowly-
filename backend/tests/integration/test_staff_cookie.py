@@ -12,6 +12,7 @@ from django.core.management.base import CommandError
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
+from apps.accounts import services
 from apps.accounts.session_cookie import ACCESS_COOKIE, REFRESH_COOKIE
 from tests.factories import PASSWORD, OwnerFactory, RequestFactory, StaffFactory, UserFactory
 
@@ -172,7 +173,7 @@ def test_a_token_sent_in_the_body_still_refreshes_for_token_clients():
 
 def test_a_team_refresh_token_in_the_body_is_refused_unless_the_setting_allows_it(settings):
     staff = StaffFactory()
-    refresh = str(RefreshToken.for_user(staff))
+    refresh = services.issue_tokens(staff, team_session=True)["refresh"]  # a token from a real team sign-in
     settings.ALLOW_STAFF_BEARER = False
     refused = APIClient().post(f"{V1}/auth/token/refresh/", {"refresh": refresh}, format="json")
     assert refused.status_code == 401 and "browser session" in refused.content.decode()

@@ -18,9 +18,15 @@ class MfaAwareRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
         from apps.security import service as mfa_service
 
+        from . import session_cookie, session_limits
+
+        token = RefreshToken(attrs["refresh"])  # an invalid or blacklisted token raises TokenError as usual
+        user = User.objects.filter(pk=token.get("user_id")).first()
+        if user is not None and session_cookie.is_staff_session(user):
+            # FL-22b: the idle (30 minutes) and absolute (8 hours) limits; a team token with no session claims
+            # (issued before they existed) is refused too. Customers are never checked.
+            session_limits.check(token.payload, touch=True)
         if settings.REQUIRE_STAFF_MFA:
-            token = RefreshToken(attrs["refresh"])  # an invalid or blacklisted token raises TokenError as usual
-            user = User.objects.filter(pk=token.get("user_id")).first()
             if user is not None and mfa_service.is_team_user(user) and not token.get("mfa"):
                 raise TokenError("Sign in again with your verification code.")
         return super().validate(attrs)
