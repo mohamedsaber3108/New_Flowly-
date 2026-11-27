@@ -1,4 +1,4 @@
-import {z} from 'zod';
+import {z} from 'zod/v4';
 import {services} from './catalog';
 export type DBStatement={bind:(...params:unknown[])=>DBStatement;first:<T=Record<string,unknown>>()=>Promise<T|null>;all:()=>Promise<{results:Record<string,unknown>[]}>;run:()=>Promise<unknown>};
 export type Database={prepare:(sql:string)=>DBStatement;batch:(statements:DBStatement[])=>Promise<unknown>};
