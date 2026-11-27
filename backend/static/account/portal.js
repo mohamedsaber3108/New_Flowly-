@@ -64,14 +64,14 @@
     pending_review: 'بانتظار مراجعة الفريق', in_review: 'قيد المراجعة', needs_information: 'نحتاج معلومات إضافية',
     proposal_preparing: 'جارٍ إعداد العرض', proposal_sent: 'تم إرسال العرض', confirmed: 'مؤكد', completed: 'مكتمل',
     declined: 'تعذّر التنفيذ', canceled: 'ملغي', provisional: 'بانتظار التأكيد', submitted: 'تم الإرسال',
-    status_changed: 'تغيّرت الحالة', note_updated: 'تحديث داخلي', assigned: 'تم التعيين'
+    status_changed: 'تغيّرت الحالة', note_updated: 'تحديث داخلي', pipeline_updated: 'تحديث داخلي', assigned: 'تم التعيين'
   };
   var EN_LABELS = {
     discovery: 'Discovery', consultation: 'Consultation', contact: 'Contact', pending_review: 'Awaiting team review',
     in_review: 'In review', needs_information: 'More information needed', proposal_preparing: 'Proposal in preparation',
     proposal_sent: 'Proposal shared', confirmed: 'Confirmed', completed: 'Completed', declined: 'Unable to proceed',
     canceled: 'Canceled', provisional: 'Pending confirmation', submitted: 'Submitted', status_changed: 'Status changed',
-    note_updated: 'Internal update', assigned: 'Assigned', 'Switch language': 'عربي'
+    note_updated: 'Internal update', pipeline_updated: 'Internal update', assigned: 'Assigned', 'Switch language': 'عربي'
   };
   function lang() { return localStorage.getItem('flowly-language') === 'ar' ? 'ar' : 'en'; }
   function t(s) { return lang() === 'ar' ? (AR[s] || s) : (EN_LABELS[s] || s); }

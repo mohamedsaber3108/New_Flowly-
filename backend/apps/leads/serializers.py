@@ -48,6 +48,11 @@ class RequestCreateSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=100), max_length=4, required=False, default=list
     )
     selectedService = _opt()
+    # Where the visitor came from (FL-15). Optional; kept for the team only.
+    sourcePage = _opt(255)
+    utmSource = _opt(100)
+    utmMedium = _opt(100)
+    utmCampaign = _opt(100)
     consent = serializers.BooleanField()
     date = serializers.RegexField(r"^\d{4}-\d{2}-\d{2}$", allow_null=True, required=False, default=None)
     time = serializers.ChoiceField(choices=TIME_CHOICES, allow_null=True, required=False, default=None)

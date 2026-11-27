@@ -70,6 +70,10 @@ def create_request(data: dict, user=None):
                 language=data["language"],
                 consent=True,
                 details=details,
+                source_page=data.get("sourcePage", ""),
+                utm_source=data.get("utmSource", ""),
+                utm_medium=data.get("utmMedium", ""),
+                utm_campaign=data.get("utmCampaign", ""),
                 status=Request.Status.PENDING_REVIEW,
                 user=user if getattr(user, "is_authenticated", False) else None,
             )
@@ -134,12 +138,42 @@ def appointment_status_for(status: str) -> str:
     return Appointment.Status.PROVISIONAL
 
 
-def update_request(req: Request, *, status=None, internal_note=None, assigned_to=None, assign=False, actor=None):
-    """Apply a team update. Raises SlotTaken if re-activating an appointment whose slot was re-booked."""
+def _plain(value):
+    """A value as the audit log stores it (dates as ISO text)."""
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def update_request(
+    req: Request,
+    *,
+    status=None,
+    internal_note=None,
+    assigned_to=None,
+    assign=False,
+    quote_status=None,
+    value_range=None,
+    next_follow_up=None,
+    set_follow_up=False,
+    actor=None,
+):
+    """Apply a team update. Raises SlotTaken if re-activating an appointment whose slot was re-booked.
+
+    Pipeline fields (FL-15): `quote_status` and `value_range` (None = leave as is; "" clears the value range) and
+    `next_follow_up` (a date or None; only applied when `set_follow_up=True`, so None can mean "clear it").
+    `first_reply_at` is set once, at the first status change or note by the team.
+    """
     previous_status = req.status
     previous_note = req.internal_note
     previous_assignee = req.assigned_to.email if req.assigned_to_id else None
     fields = ["updated_at", "reviewed_at"]
+    pipeline_before, pipeline_after = {}, {}
+    for name, wanted, applies in (
+        ("quote_status", quote_status, quote_status is not None),
+        ("value_range", value_range, value_range is not None),
+        ("next_follow_up", next_follow_up, set_follow_up),
+    ):
+        if applies and getattr(req, name) != wanted:
+            pipeline_before[name], pipeline_after[name] = getattr(req, name), wanted
     try:
         with transaction.atomic():
             if status is not None:
@@ -154,8 +188,24 @@ def update_request(req: Request, *, status=None, internal_note=None, assigned_to
             if assign:
                 req.assigned_to = assigned_to
                 fields.append("assigned_to")
+            for name, value in pipeline_after.items():
+                setattr(req, name, value)
+                fields.append(name)
             req.reviewed_at = timezone.now()
+            if req.first_reply_at is None and ((status is not None and status != previous_status) or note_changed):
+                req.first_reply_at = req.reviewed_at
+                fields.append("first_reply_at")
             req.save(update_fields=fields)
+            if pipeline_after:
+                RequestEvent.objects.create(request=req, event_type="pipeline_updated", status=req.status, actor=actor)
+                audit.record(
+                    audit.A.REQUEST_PIPELINE,
+                    actor=actor,
+                    target=req,
+                    target_id=req.reference,
+                    before={k: _plain(v) for k, v in pipeline_before.items()},
+                    after={k: _plain(v) for k, v in pipeline_after.items()},
+                )
             if status is not None:
                 for appointment in req.appointments.all():
                     appointment.status = appointment_status_for(status)

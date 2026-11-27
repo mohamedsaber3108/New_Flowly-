@@ -27,10 +27,12 @@ def _breakdown(queryset, field, choices):
 
 def dashboard_callback(request, context):
     from apps.accounts.models import User
+    from apps.leads import pipeline
     from apps.leads.models import Appointment, Request
 
     now = timezone.now()
     today = timezone.localdate()
+    changelist = reverse("admin:leads_request_changelist")
     requests = Request.objects.all()
     last_30 = requests.filter(created_at__gte=now - timedelta(days=30))
 
@@ -68,6 +70,12 @@ def dashboard_callback(request, context):
             "flowly_by_kind": _breakdown(requests, "kind", Request.Kind.choices),
             "flowly_by_audience": _breakdown(requests, "audience", Request.Audience.choices),
             "flowly_weekly": series,
+            "flowly_quote_stages": [
+                {**stage, "url": f"{changelist}?quote_status__exact={stage['value']}"}
+                for stage in pipeline.quote_stage_counts(requests)
+            ],
+            "flowly_first_reply": pipeline.first_reply_summary(now),
+            "flowly_win_rates": pipeline.win_rate_by_source(),
             "flowly_next_appointments": Appointment.objects.filter(
                 status__in=["provisional", "confirmed"], date__gte=today
             )

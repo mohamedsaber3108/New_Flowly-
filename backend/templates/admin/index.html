@@ -79,6 +79,33 @@
 
 <div class="fl-grid fl-two">
   <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Quotes by stage</h2>
+    {% for s in flowly_quote_stages %}
+      <a class="fl-row hover:text-primary-600" href="{{ s.url }}"><span>{{ s.label }}</span><strong>{{ s.count }}</strong></a>
+    {% endfor %}
+    <h3 class="font-semibold mt-4 mb-1">Time to first reply (last 30 days)</h3>
+    {% if flowly_first_reply.median_hours is None %}
+      <p class="opacity-70">No replies yet. Waiting for a first reply: {{ flowly_first_reply.waiting }}.</p>
+    {% else %}
+      <p><strong>{{ flowly_first_reply.median_hours }} hours</strong> (median of {{ flowly_first_reply.replied }} replied). Waiting for a first reply: {{ flowly_first_reply.waiting }}.</p>
+    {% endif %}
+  </section>
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
+    <h2 class="font-semibold mb-3">Win rate by source</h2>
+    {% if flowly_win_rates %}
+      <table class="fl-table"><thead><tr><th>Source</th><th>Requests</th><th>Won</th><th>Lost</th><th>Win rate</th></tr></thead><tbody>
+      {% for r in flowly_win_rates %}
+        <tr><td><bdi>{{ r.source }}</bdi></td><td>{{ r.total }}</td><td>{{ r.won }}</td><td>{{ r.lost }}</td>
+          <td>{% if r.rate is None %}no decided quotes yet{% else %}{{ r.rate }}%{% endif %}</td></tr>
+      {% endfor %}
+      </tbody></table>
+      <p class="opacity-70 mt-2" style="font-size:12px">Win rate = accepted / (accepted + lost). Quotes not decided yet are left out. Source = UTM source, or "direct".</p>
+    {% else %}<p class="opacity-70">No requests yet.</p>{% endif %}
+  </section>
+</div>
+
+<div class="fl-grid fl-two">
+  <section class="fl-card bg-white border border-base-200 dark:bg-base-900 dark:border-base-800">
     <h2 class="font-semibold mb-3">Next consultations (Cairo time)</h2>
     {% if flowly_next_appointments %}
       <table class="fl-table"><thead><tr><th>Date</th><th>Time</th><th>Request</th><th>Status</th></tr></thead><tbody>
