@@ -85,7 +85,7 @@ class LoginView(_Public):
                 audit.record(
                     audit.A.LOGIN_FAILED,
                     target_type="login",
-                    after={"email": str(request.data.get("email", ""))[:254], "why": "account disabled"},
+                    after={"email": audit.safe_email(request.data.get("email", "")), "why": "account disabled"},
                     result=audit.R.DENIED,
                 )
             if "authentication" in codes or "disabled" in codes:

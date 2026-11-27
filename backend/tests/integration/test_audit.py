@@ -2,12 +2,15 @@
 
 import hashlib
 import json
+import os
+import stat
 from datetime import datetime, timezone
 from unittest import mock
 from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib import admin as django_admin
+from django.core.cache import cache
 from django.core.management import call_command
 from django.db import DatabaseError, transaction
 from django.test import Client
@@ -22,6 +25,14 @@ from apps.audit.models import AuditEntry, AuditError
 from tests.factories import PASSWORD, RequestFactory, StaffFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture(autouse=True)
+def fresh_cache():
+    """The once-a-minute denied-row limit lives in the cache; ids repeat between tests, so start clean."""
+    cache.clear()
+
+
 V1 = "/api/v1"
 A = AuditEntry.Action
 R = AuditEntry.Result
@@ -247,6 +258,10 @@ def test_export_audit_log_command_writes_jsonl_and_matching_sha256(tmp_path):
     sha_line = (tmp_path / f"audit-{today}.jsonl.sha256").read_text().split()
     assert sha_line == [hashlib.sha256(data).hexdigest(), f"audit-{today}.jsonl"]
     assert only(A.EXPORT_AUDIT, target_id=today).reason.startswith("Daily export")
+    # The files hold emails and IP addresses: owner-only files in an owner-only folder.
+    assert stat.S_IMODE(os.stat(tmp_path).st_mode) == 0o700
+    for name in (f"audit-{today}.jsonl", f"audit-{today}.jsonl.sha256"):
+        assert stat.S_IMODE(os.stat(tmp_path / name).st_mode) == 0o600
 
 
 def test_export_audit_log_command_fails_closed(tmp_path):
@@ -274,6 +289,87 @@ def test_denied_calls_on_team_routes_are_recorded():
 def test_anonymous_probes_without_credentials_are_not_logged():
     assert APIClient().get(f"{V1}/admin/requests/").status_code == 401
     assert not AuditEntry.objects.filter(action=A.DENIED).exists()
+
+
+@pytest.mark.parametrize("header", ["Basic x", "Bearer not-a-real-token", "Token abc", "Bearer "])
+def test_unauthenticated_calls_with_any_authorization_header_write_no_rows(header):
+    """The flood case: anyone on the internet can send these. 50 calls on each team API write 0 rows."""
+    api = APIClient()
+    for _ in range(50):
+        assert api.get(f"{V1}/admin/requests/", HTTP_AUTHORIZATION=header).status_code == 401
+        assert api.get("/api/admin/requests", HTTP_AUTHORIZATION=header).status_code == 401
+    assert AuditEntry.objects.count() == 0
+
+
+def test_a_signed_in_user_denied_ten_times_in_a_minute_writes_one_row_per_route():
+    customer = UserFactory()
+    api = APIClient()
+    for _ in range(10):
+        assert api.get(f"{V1}/admin/requests/", **bearer(customer)).status_code == 403
+    assert AuditEntry.objects.filter(action=A.DENIED).count() == 1
+    for _ in range(10):
+        assert api.get("/api/admin/requests", **bearer(customer)).status_code == 403
+    assert AuditEntry.objects.filter(action=A.DENIED).count() == 2  # a different route has its own window
+    other = UserFactory()
+    assert api.get(f"{V1}/admin/requests/", **bearer(other)).status_code == 403
+    assert AuditEntry.objects.filter(action=A.DENIED).count() == 3  # and so does a different actor
+
+
+def test_denied_rows_come_back_after_the_one_minute_window():
+    customer = UserFactory()
+    api = APIClient()
+    api.get(f"{V1}/admin/requests/", **bearer(customer))
+    cache.clear()  # what the cache does when the 60 seconds are over
+    api.get(f"{V1}/admin/requests/", **bearer(customer))
+    assert AuditEntry.objects.filter(action=A.DENIED).count() == 2
+
+
+def test_a_mistyped_password_in_the_login_field_is_not_stored():
+    typed = "Str0ng-Passw0rd!x"
+    assert Client().login(username=typed, password="whatever") is False
+    entry = only(A.LOGIN_FAILED)
+    assert entry.after == {"email": "[not an email]"}
+    assert typed not in json.dumps(list(AuditEntry.objects.values()), default=str)
+    assert audit.safe_email("a@b.co") == "a@b.co" and audit.safe_email("a b@c.d") == "[not an email]"
+
+
+# --- hard delete of users ---------------------------------------------------------------------------------------------
+
+
+def test_admin_cannot_hard_delete_users_so_no_delete_goes_unaudited(admin_client):
+    client, root = admin_client
+    victim = UserFactory()
+    model_admin = UserAdmin(User, django_admin.site)
+    assert model_admin.has_delete_permission(make_admin_request(root)) is False
+    assert client.get(f"/admin/accounts/user/{victim.pk}/delete/").status_code == 403
+    assert client.post(f"/admin/accounts/user/{victim.pk}/delete/", {"post": "yes"}).status_code == 403
+    client.post(
+        "/admin/accounts/user/",
+        {"action": "delete_selected", "_selected_action": [str(victim.pk)], "post": "yes"},
+    )
+    assert User.objects.filter(pk=victim.pk).exists()
+    assert "delete_selected" not in model_admin.get_actions(make_admin_request(root))
+
+
+def test_ticking_is_deleted_in_the_admin_form_is_audited_as_a_delete():
+    owner = User.objects.create_superuser(email="root@example.test", password=PASSWORD)
+    target = UserFactory()
+    target.is_deleted = True
+    target.is_active = False
+    save_through_admin(owner, target)
+    entry = only(A.USER_DELETE, target_id=str(target.pk))
+    assert entry.actor_id == owner.pk and entry.after == {"is_deleted": True, "is_active": False}
+
+
+def test_purge_e2e_hard_delete_is_audited_and_fails_closed():
+    gone = UserFactory(email="e2e-one@example.test")
+    kept = UserFactory(email="e2e-two@example.test")
+    with write_fails(), pytest.raises(DatabaseError):
+        call_command("purge_e2e", "--yes")
+    assert User.objects.filter(pk__in=[gone.pk, kept.pk]).count() == 2
+    call_command("purge_e2e", "--yes")
+    assert not User.objects.filter(pk__in=[gone.pk, kept.pk]).exists()
+    assert AuditEntry.objects.filter(action=A.USER_DELETE, reason__startswith="purge_e2e").count() == 2
 
 
 def test_a_failed_audit_write_never_changes_a_403():

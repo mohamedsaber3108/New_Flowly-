@@ -11,6 +11,7 @@ shortcut: the copy stays on the same server until the owner approves an off-box 
 
 import hashlib
 import json
+import os
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -20,6 +21,14 @@ from django.db import transaction
 
 from apps.audit import service as audit
 from apps.audit.models import AuditEntry
+
+
+def write_private(path, data):
+    """Write a file that only its owner can read (0600), whatever the umask. Replaces an older file of the day."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(data)
+    os.chmod(path, 0o600)
 
 
 def entry_to_dict(e):
@@ -71,11 +80,12 @@ class Command(BaseCommand):
                 reason="Daily export (management command)",
                 sensitive=True,
             )
-            out_dir.mkdir(parents=True, exist_ok=True)
+            out_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(out_dir, 0o700)  # the log holds emails and IP addresses: owner only
             name = f"audit-{day.isoformat()}.jsonl"
             body = "".join(json.dumps(entry_to_dict(e), ensure_ascii=False, sort_keys=True) + "\n" for e in entries)
             data = body.encode("utf-8")
-            (out_dir / name).write_bytes(data)
             digest = hashlib.sha256(data).hexdigest()
-            (out_dir / f"{name}.sha256").write_text(f"{digest}  {name}\n", encoding="utf-8")
+            write_private(out_dir / name, data)
+            write_private(out_dir / f"{name}.sha256", f"{digest}  {name}\n".encode("utf-8"))
         self.stdout.write(f"{name}: {len(data)} bytes, sha256 {digest}")

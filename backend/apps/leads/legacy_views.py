@@ -195,7 +195,6 @@ class TeamLegacyView(LegacyAPIView):
 
     def team_gate(self, request, roles):
         if not request.user or not request.user.is_authenticated:
-            audit.record_denied(request, self, 401)
             return self.error(401, "Unauthorized")
         if not has_role(request.user, roles):
             audit.record_denied(request, self, 403)

@@ -8,7 +8,7 @@ from apps.audit import service as audit
 from .models import User
 
 # Fields whose change gives or removes access. Any change is audited, fail closed.
-ACCESS_FIELDS = ("role", "status", "is_active", "is_staff", "is_superuser")
+ACCESS_FIELDS = ("role", "status", "is_active", "is_staff", "is_superuser", "is_deleted")
 
 
 @admin.register(User)
@@ -43,6 +43,12 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
         ),
     )
 
+    def has_delete_permission(self, request, obj=None):
+        """No hard delete of users in the admin, for anyone (superusers too). Reason: a hard delete cascades and
+        cannot be audited reliably, and the soft delete (`is_deleted`, audited in save_model below) keeps the row
+        for request history. This also removes the "Delete selected users" bulk action."""
+        return False
+
     def save_model(self, request, obj, form, change):
         """Audit role, status and access changes. Django wraps the admin save in a transaction, and the entry is
         sensitive (fail closed), so if the audit write fails the change is rolled back.
@@ -68,7 +74,9 @@ class UserAdmin(DjangoUserAdmin, UnfoldModelAdmin):
         groups = []  # (action, fields): a role change and a suspension in one save are two entries
         if changed & {"role", "is_staff", "is_superuser"}:
             groups.append((audit.A.USER_ROLE, changed & {"role", "is_staff", "is_superuser"}))
-        if changed & {"status", "is_active"}:
+        if "is_deleted" in changed and obj.is_deleted:  # soft delete by ticking the box in the admin form
+            groups.append((audit.A.USER_DELETE, {"is_deleted", "is_active"}))
+        elif changed & {"status", "is_active"}:
             reactivated = obj.is_active and obj.status == User.Status.ACTIVE
             groups.append(
                 (audit.A.USER_REACTIVATE if reactivated else audit.A.USER_SUSPEND, changed & {"status", "is_active"})

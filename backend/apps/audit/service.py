@@ -8,9 +8,11 @@ sensitive=False -> best effort: a failed write is logged and swallowed, inside a
                    transaction is not poisoned.
 """
 
+import hashlib
 import logging
 import re
 
+from django.core.cache import cache
 from django.db import transaction
 
 from apps.core.utils import client_ip
@@ -106,15 +108,37 @@ def record(
         return None
 
 
+DENIED_WINDOW_SECONDS = 60
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def safe_email(value):
+    """A typed sign-in name is stored only if it looks like an email. Anything else (often a pasted password)
+    becomes a fixed text, so a mistyped secret never lands in the log."""
+    text = str(value or "").strip()
+    return text if len(text) <= 254 and EMAIL_RE.match(text) else "[not an email]"
+
+
 def record_denied(request, view=None, status_code=403):
-    """A refused call on a team route. Anonymous probes without any credentials are not logged (noise)."""
+    """A refused call on a team route by a REAL signed-in user (or the shared-key principal).
+
+    Callers who are not authenticated are never logged, whatever Authorization header they send: anyone on the
+    internet can produce those, and they would fill the table. Each actor + route writes at most one row a minute.
+    """
     user = getattr(request, "user", None)
-    authenticated = bool(getattr(user, "is_authenticated", False))
-    if not authenticated and not request.META.get("HTTP_AUTHORIZATION"):
+    if not getattr(user, "is_authenticated", False):
+        return None
+    actor_key = getattr(user, "pk", None) or "shared-key"
+    route = hashlib.sha1(request.path.encode()).hexdigest()  # noqa: S324 - a cache key, not security
+    try:
+        first_in_window = cache.add(f"audit:denied:{actor_key}:{route}", 1, DENIED_WINDOW_SECONDS)
+    except Exception:  # noqa: BLE001 - if the cache is down, log rather than lose the row
+        first_in_window = True
+    if not first_in_window:
         return None
     return record(
         A.DENIED,
-        actor=user if authenticated else None,
+        actor=user,
         target_type="route",
         target_id=request.path[:64],
         after={"method": request.method, "status": status_code, "view": view.__class__.__name__ if view else ""},

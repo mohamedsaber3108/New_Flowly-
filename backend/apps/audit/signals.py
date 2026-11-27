@@ -14,7 +14,7 @@ def on_login_failed(sender, credentials=None, **kwargs):
     audit.record(
         audit.A.LOGIN_FAILED,
         target_type="login",
-        after={"email": str(tried)[:254]},
+        after={"email": audit.safe_email(tried)},
         result=audit.R.FAILED,
     )
 
