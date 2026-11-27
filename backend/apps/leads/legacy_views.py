@@ -100,7 +100,15 @@ class HealthView(LegacyAPIView):
                 cursor.fetchone()
         except DatabaseError:
             return Response({"status": "degraded", "service": "flowly-web", "storage": "unavailable"}, status=503)
-        return Response({"status": "ok", "service": "flowly-web", "storage": "ok"})
+        # sharedAdminToken tells /team whether to show the shared-key field. A boolean only, never the key.
+        return Response(
+            {
+                "status": "ok",
+                "service": "flowly-web",
+                "storage": "ok",
+                "sharedAdminToken": bool(settings.ALLOW_SHARED_ADMIN_TOKEN and len(settings.ADMIN_TOKEN or "") >= 32),
+            }
+        )
 
 
 class RequestsView(LegacyAPIView):
