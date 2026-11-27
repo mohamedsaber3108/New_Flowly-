@@ -211,6 +211,11 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "flowly_cache_table",
+        # Django's default is 300 entries. When the table is full it deletes the lowest KEYS first (not the oldest),
+        # and every visitor's throttle key adds a row, so counters such as "assistant:model-calls:<day>" and the
+        # sign-in lock counters could be thrown away early and a cap would reset. 50000 rows is a few MB; when it is
+        # ever full, only 1 row in 10 is culled.
+        "OPTIONS": {"MAX_ENTRIES": 50000, "CULL_FREQUENCY": 10},
     }
 }
 

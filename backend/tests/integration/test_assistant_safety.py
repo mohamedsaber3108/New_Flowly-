@@ -15,6 +15,7 @@ from django.core.cache import cache
 from django.core.management import call_command
 
 from apps.leads import assistant
+from config.settings import base as base_settings
 
 pytestmark = pytest.mark.django_db
 
@@ -205,6 +206,47 @@ def test_the_provider_gets_the_message_and_trimmed_redacted_history_and_nothing_
     assert len(sent["messages"]) <= 1 + 3 + 1  # system + at most 3 earlier turns + the message
     assert all(len(m["content"]) <= 500 for m in sent["messages"][1:-1])
     assert set(sent) == {"model", "messages", "temperature", "max_tokens"}  # no user id, name or email field
+
+
+# --- the database cache must not throw the counter away --------------------------------------------------------
+
+
+def fill_with_other_keys(count):
+    """What visitors do to the cache table: throttle keys and other counters, one row each."""
+    for n in range(count):
+        cache.set(f"throttle_anon_{n:05d}", 1, timeout=3600)
+
+
+@pytest.mark.parametrize(
+    "options, survives",
+    [({}, False), (base_settings.CACHES["default"]["OPTIONS"], True)],
+    ids=["django-default-300-entries-loses-it", "flowly-settings-keep-it"],
+)
+def test_the_daily_counter_survives_a_full_cache_table_only_with_the_flowly_cache_options(settings, options, survives):
+    """With Django's default (300 entries, cull the lowest keys first) a few hundred visitors push the counter out and
+    the cap would reset. The first case proves the test can see that; the second is the real settings."""
+    default = dict(base_settings.CACHES["default"])
+    default.pop("OPTIONS", None)
+    settings.CACHES = {"default": {**default, **({"OPTIONS": options} if options else {})}}
+    call_command("createcachetable", verbosity=0)
+    cache.clear()
+    settings.ASSISTANT_DAILY_LIMIT = 200
+    for _ in range(5):
+        assert assistant.reserve_model_call() is True
+    key = f"assistant:model-calls:{assistant._now().date().isoformat()}"
+    assert cache.get(key) == 5
+
+    fill_with_other_keys(450)  # far past 300 rows
+
+    assert (cache.get(key) == 5) is survives
+    if survives:
+        assistant.reserve_model_call()
+        assert cache.get(key) == 6  # and it keeps counting from where it was
+
+
+def test_the_flowly_cache_options_are_set_in_the_base_settings():
+    options = base_settings.CACHES["default"]["OPTIONS"]
+    assert options == {"MAX_ENTRIES": 50000, "CULL_FREQUENCY": 10}
 
 
 def test_redaction_helpers():
