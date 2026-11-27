@@ -78,6 +78,15 @@ class User(AbstractUser):
     def is_team(self):
         return self.is_superuser or self.role in (self.Role.OWNER, self.Role.STAFF, self.Role.VIEWER)
 
+    def has_perm(self, perm, obj=None):
+        """A viewer is read-only in the Django admin whatever groups or permissions someone gives them (ADMIN.md s.3:
+        viewer = Analyst). Django asks this for every add, change and delete in the admin, so the refusal is on the
+        server and does not depend on a page hiding a button. Viewing is left to the normal rules."""
+        if self.role == self.Role.VIEWER and not self.is_superuser:
+            if perm.rsplit(".", 1)[-1].split("_", 1)[0] in ("add", "change", "delete"):
+                return False
+        return super().has_perm(perm, obj)
+
     def soft_delete(self, actor=None, reason="Account deleted"):
         """Never hard-delete: disable login, keep the row for audit and request history.
 

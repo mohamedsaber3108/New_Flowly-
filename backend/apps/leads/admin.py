@@ -176,15 +176,17 @@ class RequestAdmin(UnfoldModelAdmin):
             )
         return response
 
-    @action(description="Mark as in review")
+    # These three change requests, so they are offered and accepted only to someone who may change them (a viewer
+    # who can see the list cannot run them).
+    @action(description="Mark as in review", permissions=["change"])
     def mark_in_review(self, request, queryset):
         _set_status(self, request, queryset, "in_review")
 
-    @action(description="Mark as confirmed")
+    @action(description="Mark as confirmed", permissions=["change"])
     def mark_confirmed(self, request, queryset):
         _set_status(self, request, queryset, "confirmed")
 
-    @action(description="Mark as declined")
+    @action(description="Mark as declined", permissions=["change"])
     def mark_declined(self, request, queryset):
         _set_status(self, request, queryset, "declined")
 
