@@ -17,6 +17,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from apps.audit import service as audit
 from apps.core.exceptions import envelope
 from apps.core.negotiation import IgnoreClientContentNegotiation
 
@@ -80,6 +81,13 @@ class LoginView(_Public):
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             codes = {c.code for errs in serializer.errors.values() for c in errs}
+            if "disabled" in codes:  # wrong passwords are already logged by the user_login_failed signal
+                audit.record(
+                    audit.A.LOGIN_FAILED,
+                    target_type="login",
+                    after={"email": str(request.data.get("email", ""))[:254], "why": "account disabled"},
+                    result=audit.R.DENIED,
+                )
             if "authentication" in codes or "disabled" in codes:
                 return envelope(
                     "Invalid email or password." if "authentication" in codes else "This account is disabled.",
@@ -92,6 +100,7 @@ class LoginView(_Public):
             return envelope("Verify your email address before signing in.", {"code": "email_not_verified"}, 403)
         user.last_login = timezone.now()
         user.save(update_fields=["last_login"])
+        audit.record(audit.A.LOGIN, actor=user, target=user, after={"via": "api"})
         return Response(
             {
                 "message": "Signed in.",
@@ -336,11 +345,13 @@ class MeView(GenericAPIView):
             return envelope(
                 "Enter your current password to delete the account.", {"password": ["Incorrect password."]}, 400
             )
+        from django.db import transaction
         from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-        for token in OutstandingToken.objects.filter(user=request.user):
-            BlacklistedToken.objects.get_or_create(token=token)
-        request.user.soft_delete()
+        with transaction.atomic():  # all or nothing: no audit entry, no deletion
+            for token in OutstandingToken.objects.filter(user=request.user):
+                BlacklistedToken.objects.get_or_create(token=token)
+            request.user.soft_delete(reason="Self-service account deletion")
         return Response({"message": "Account deleted.", "data": None})
 
 

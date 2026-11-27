@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.audit import service as audit
 from apps.core.utils import send_template_email
 
 from .models import Appointment, Request, RequestEvent
@@ -125,6 +126,8 @@ def appointment_status_for(status: str) -> str:
 def update_request(req: Request, *, status=None, internal_note=None, assigned_to=None, assign=False, actor=None):
     """Apply a team update. Raises SlotTaken if re-activating an appointment whose slot was re-booked."""
     previous_status = req.status
+    previous_note = req.internal_note
+    previous_assignee = req.assigned_to.email if req.assigned_to_id else None
     fields = ["updated_at", "reviewed_at"]
     try:
         with transaction.atomic():
@@ -148,10 +151,34 @@ def update_request(req: Request, *, status=None, internal_note=None, assigned_to
                     appointment.save(update_fields=["status", "updated_at"])
                 if status != previous_status:
                     RequestEvent.objects.create(request=req, event_type="status_changed", status=status, actor=actor)
+                    audit.record(
+                        audit.A.REQUEST_STATUS,
+                        actor=actor,
+                        target=req,
+                        target_id=req.reference,
+                        before={"status": previous_status},
+                        after={"status": status},
+                    )
             if note_changed:
                 RequestEvent.objects.create(request=req, event_type="note_updated", status=req.status, actor=actor)
+                audit.record(
+                    audit.A.REQUEST_NOTE,
+                    actor=actor,
+                    target=req,
+                    target_id=req.reference,
+                    before={"internal_note": previous_note},
+                    after={"internal_note": internal_note},
+                )
             if assign:
                 RequestEvent.objects.create(request=req, event_type="assigned", status=req.status, actor=actor)
+                audit.record(
+                    audit.A.REQUEST_ASSIGN,
+                    actor=actor,
+                    target=req,
+                    target_id=req.reference,
+                    before={"assigned_to": previous_assignee},
+                    after={"assigned_to": assigned_to.email if assigned_to else None},
+                )
     except IntegrityError:
         raise SlotTaken()
     if status is not None and status != previous_status:
