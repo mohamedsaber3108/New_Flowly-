@@ -10,7 +10,8 @@ import pytest
 from django.contrib import admin as django_admin
 from django.core.management import call_command
 from django.db import DatabaseError, transaction
-from django.test import Client, RequestFactory as DjangoRequestFactory
+from django.test import Client
+from django.test import RequestFactory as DjangoRequestFactory
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import AccessToken
 
