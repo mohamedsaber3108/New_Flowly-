@@ -48,6 +48,11 @@ class RequestCreateSerializer(serializers.Serializer):
         child=serializers.CharField(max_length=100), max_length=4, required=False, default=list
     )
     selectedService = _opt()
+    # Where the visitor came from (FL-15). Optional; kept for the team only.
+    sourcePage = _opt(255)
+    utmSource = _opt(100)  # lower-cased; anything but a-z 0-9 _ . - is saved as "other" (see validate_utmSource)
+    utmMedium = _opt(100)
+    utmCampaign = _opt(100)
     consent = serializers.BooleanField()
     date = serializers.RegexField(r"^\d{4}-\d{2}-\d{2}$", allow_null=True, required=False, default=None)
     time = serializers.CharField(allow_null=True, required=False, default=None, max_length=5)
@@ -59,6 +64,11 @@ class RequestCreateSerializer(serializers.Serializer):
         if value is not None and value not in site_settings.get().slot_times:
             raise serializers.ValidationError(f'"{value}" is not a valid choice.')
         return value
+
+    def validate_utmSource(self, value):
+        from .pipeline import clean_source
+
+        return clean_source(value)
 
     def validate_consent(self, value):
         if value is not True:

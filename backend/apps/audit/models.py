@@ -35,6 +35,7 @@ class AuditEntry(models.Model):
         REQUEST_STATUS = "request.status_change", "Request status changed / تغيير حالة الطلب"
         REQUEST_ASSIGN = "request.assign", "Request assigned / إسناد الطلب"
         REQUEST_NOTE = "request.note", "Request note changed / تعديل ملاحظة الطلب"
+        REQUEST_PIPELINE = "request.pipeline", "Quote, value or follow-up changed / تغيير العرض أو القيمة أو المتابعة"
         EXPORT_REQUESTS = "export.requests_csv", "Requests exported / تصدير الطلبات"
         EXPORT_AUDIT = "export.audit_log", "Audit log exported / تصدير سجل التدقيق"
         SETTINGS = "settings.change", "Setting changed / تغيير إعداد"
