@@ -94,6 +94,8 @@ class AvailabilityView(PublicAPIView):
         responses={200: OpenApiTypes.OBJECT},
     )
     def get(self, request):
+        if request.query_params.get("calendar"):  # the open days, for the booking calendar (no date needed)
+            return Response(intake.calendar())
         try:
             return Response(intake.availability(request.query_params.get("date", "")))
         except intake.IntakeError as exc:

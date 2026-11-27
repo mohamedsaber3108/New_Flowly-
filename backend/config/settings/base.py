@@ -160,7 +160,7 @@ CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
 
 # --- REST framework ---------------------------------------------------------
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework_simplejwt.authentication.JWTAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.accounts.session_cookie.CookieJWTAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["apps.core.renderers.EnvelopeJSONRenderer"],
     "DEFAULT_PARSER_CLASSES": [
@@ -195,6 +195,13 @@ REST_FRAMEWORK = {
         "auth_reset": config("THROTTLE_RESET", default="5/hour"),
     },
 }
+
+# Staff sign-in cookies (FL-22). Staff tokens live in httpOnly cookies; a bearer header for a staff account is
+# refused unless this is on (for a script or tool that cannot use a browser session). Customers are not affected.
+ALLOW_STAFF_BEARER = config("ALLOW_STAFF_BEARER", default=False, cast=bool)
+STAFF_COOKIE_SECURE = config("STAFF_COOKIE_SECURE", default=True, cast=bool)  # False only for http://localhost
+STAFF_SESSION_IDLE_SECONDS = config("STAFF_SESSION_IDLE_SECONDS", default=1800, cast=int)  # refresh cookie life
+CSRF_COOKIE_SAMESITE = "Strict"
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),

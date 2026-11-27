@@ -132,6 +132,90 @@ class AssistantMessage(TimeStampedModel):
         return self.message[:60]
 
 
+def default_booking_weekdays():
+    """Sunday to Thursday, as Python weekday numbers (Monday=0 ... Sunday=6): today's behaviour."""
+    return [0, 1, 2, 3, 6]
+
+
+def default_slot_times():
+    return ["10:00", "11:00", "12:00", "14:00", "15:00"]
+
+
+class SingleRowManager(models.Manager):
+    """`save()` forces pk=1, but `bulk_create()` would skip it and could add a second row. Refuse it."""
+
+    def bulk_create(self, objs, *args, **kwargs):
+        raise TypeError("Site settings are a single row: use SiteSettings.load() and save().")
+
+
+class SiteSettings(models.Model):
+    """The one row of settings the team changes in the admin (FL-21). Secrets are NOT stored here: they stay in env.
+
+    The defaults reproduce the behaviour before this model existed. Read it through `apps.leads.site_settings.get()`
+    (cached for 60 seconds, cleared on save).
+    """
+
+    assistant_enabled = models.BooleanField(
+        "Assistant on", default=True, help_text="Off: the chat assistant answers with a short 'switched off' message."
+    )
+    intake_enabled = models.BooleanField(
+        "New requests on",
+        default=True,
+        help_text=(
+            "Off: the public forms show a clear message and save nothing. " "Requests already received are not touched."
+        ),
+    )
+    booking_weekdays = models.JSONField(
+        "Booking days",
+        default=default_booking_weekdays,
+        help_text="Days of the week when consultations can be requested.",
+    )
+    slot_times = models.JSONField(
+        "Time slots (Africa/Cairo)", default=default_slot_times, help_text="24-hour times, for example 10:00."
+    )
+    booking_horizon_days = models.PositiveSmallIntegerField(
+        "How far ahead (days)", default=90, help_text="A date must be after today and at most this many days away."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+", editable=False
+    )
+
+    objects = SingleRowManager()
+
+    class Meta:
+        db_table = "leads_site_settings"
+        verbose_name = "Site settings"
+        verbose_name_plural = "Site settings"
+
+    def __str__(self):
+        return "Site settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1  # a singleton: there is only ever one row
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class BlockedDay(models.Model):
+    """A date (holiday, team away) on which no consultation can be requested."""
+
+    date = models.DateField(unique=True, db_index=True)
+    reason = models.CharField(max_length=200, blank=True, help_text="For the team only; it is never shown to visitors.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "leads_blocked_day"
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.date} {self.reason}".strip()
+
+
 # Module-level aliases used by drf-spectacular ENUM_NAME_OVERRIDES.
 RequestStatus = Request.Status
 AppointmentStatus = Appointment.Status

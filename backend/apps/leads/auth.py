@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.authentication import BaseAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
+from apps.accounts.session_cookie import CookieJWTAuthentication
 from apps.core.utils import constant_time_equals
 
 User = get_user_model()
@@ -44,8 +45,9 @@ class AdminTokenAuthentication(BaseAuthentication):
         return None
 
 
-class TeamJWTAuthentication(JWTAuthentication):
-    """Plain JWT auth, but a bearer that is neither a JWT nor the admin token is a clean 401."""
+class TeamJWTAuthentication(CookieJWTAuthentication):
+    """JWT auth for the team routes: the staff cookie (with the CSRF header), or a bearer JWT. A bearer that is
+    neither a JWT nor the admin token is a clean 401."""
 
 
 TEAM_AUTHENTICATION = [AdminTokenAuthentication, TeamJWTAuthentication]

@@ -101,14 +101,31 @@
     return el;
   }
 
+  function csrfToken() {
+    var m = document.cookie.match(/(?:^|; )csrftoken=([^;]*)/);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
   function api(path, opts, retry) {
     opts = opts || {};
     var headers = opts.headers || {};
     if (!(opts.body instanceof FormData) && opts.body) headers['Content-Type'] = 'application/json';
     if (store.access && !opts.anon) headers.Authorization = 'Bearer ' + store.access;
-    return fetch(API + path, { method: opts.method || 'GET', headers: headers,
+    // A team account (owner, staff, viewer) is signed in by httpOnly cookies the page cannot read; a request that
+    // changes data then carries the CSRF token from the readable csrftoken cookie.
+    var viaCookie = !store.access && !opts.anon && !!csrfToken();
+    if (viaCookie && (opts.method || 'GET') !== 'GET') headers['X-CSRFToken'] = csrfToken();
+    return fetch(API + path, { method: opts.method || 'GET', headers: headers, credentials: 'same-origin',
       body: opts.body instanceof FormData ? opts.body : (opts.body ? JSON.stringify(opts.body) : undefined) })
       .then(function (res) {
+        if (res.status === 401 && viaCookie && retry !== false) {
+          return fetch(API + '/auth/token/refresh/', { method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() }, body: '{}' })
+            .then(function (r) {
+              if (!r.ok) { me = null; throw { status: 401, message: t('Session expired. Please sign in again.') }; }
+              return api(path, opts, false);
+            });
+        }
         if (res.status === 401 && !opts.anon && retry !== false && store.refresh) {
           return fetch(API + '/auth/token/refresh/', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh: store.refresh }) })
@@ -193,7 +210,9 @@
   function logout() {
     var refresh = store.refresh;
     var done = function () { store.clear(); me = null; location.hash = '#login'; route(); };
-    if (refresh) api('/auth/logout/', { method: 'POST', body: { refresh: refresh } }).then(done, done); else done();
+    if (refresh) api('/auth/logout/', { method: 'POST', body: { refresh: refresh } }).then(done, done);
+    else if (csrfToken()) api('/auth/logout/', { method: 'POST', body: {} }).then(done, done); // team cookie session
+    else done();
   }
 
   function banner() {
@@ -225,7 +244,9 @@
       codeBox],
       function (d) {
         return api('/auth/login/', { method: 'POST', body: d, anon: true }).then(function (j) {
-          store.set(j.data.access, j.data.refresh); me = j.data.user; location.hash = '#dashboard';
+          // Team accounts get cookies and no token in the body: nothing is written to browser storage for them.
+          if (j.data.session === 'cookie') store.clear(); else store.set(j.data.access, j.data.refresh);
+          me = j.data.user; location.hash = '#dashboard';
         }).catch(function (err) {
           var code = err.errors && err.errors.code;
           if (code === 'mfa_required' || code === 'mfa_invalid') showCode();
@@ -371,9 +392,10 @@
       history.replaceState(null, '', location.pathname);
       hash = 'dashboard';
     }
+    if (hash === 'session=cookie') { history.replaceState(null, '', location.pathname); hash = 'dashboard'; } // Google, team
     var parts = hash.split('/'), name = parts[0];
     var needsAuth = ['dashboard', 'requests', 'request', 'profile'].indexOf(name) >= 0;
-    var load = me || !store.access ? Promise.resolve() :
+    var load = me || (!store.access && !csrfToken()) ? Promise.resolve() :
       api('/users/me/').then(function (j) { me = j.data; }).catch(function () { store.clear(); me = null; });
     load.then(function () {
       if (needsAuth && !me) { name = 'login'; if (location.hash !== '#login') { location.hash = '#login'; return; } }
