@@ -1,8 +1,12 @@
 {% extends "emails/base.html" %}
+{% comment %}
+Team alert: facts about the request only. This template is rendered WITHOUT the request object, so it cannot show
+a name, email, phone, organization or message text, even by mistake. Open the admin to read the request.
+{% endcomment %}
 {% block content %}
-<p><strong>New request {{ req.reference }}</strong></p>
-<p>{{ req.name }} ({{ req.email }}) · {{ req.organization }}<br>{{ req.get_kind_display }} · {{ req.get_audience_display }}</p>
-{% if appointment %}<p>Provisional slot: {{ appointment.date|date:"Y-m-d" }} {{ appointment.time }} (Cairo)</p>{% endif %}
-<p style="white-space:pre-wrap">{{ req.details.requirements }}</p>
-<p><a href="{{ site_url }}/admin/" style="color:#7e22ce">Open the admin</a></p>
+<p><strong>New Flowly request {{ reference }}</strong> / <span dir="rtl" lang="ar">طلب جديد على Flowly</span></p>
+<p>Type: {{ kind }}<br>Audience: {{ audience }}<br>Created: {{ created }} (Cairo time)</p>
+{# The link text is the address itself, so the text-only part of the email carries the links too. #}
+<p>Open this request in the admin:<br><a href="{{ admin_link }}" style="color:#7e22ce">{{ admin_link }}</a></p>
+<p>Team console:<br><a href="{{ team_link }}" style="color:#7e22ce">{{ team_link }}</a></p>
 {% endblock %}
