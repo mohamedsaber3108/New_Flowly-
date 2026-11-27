@@ -17,6 +17,7 @@ LOG_TO_FILE = False
 REQUIRE_EMAIL_VERIFICATION = True
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ADMIN_TOKEN = "flowly-local-test-admin-token-123456789"
+ALLOW_STAFF_BEARER = True  # the many existing tests sign in staff with a bearer token; FL-22 tests switch it off
 MFA_ENCRYPTION_KEY = Fernet.generate_key().decode()  # a new throwaway key each test run: nothing is stored or reused
 FRONTEND_URL = "https://flowly.test"
 SITE_URL = "https://flowly.test"
