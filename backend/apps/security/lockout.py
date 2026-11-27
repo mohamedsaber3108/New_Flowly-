@@ -25,6 +25,8 @@ import time
 from django.conf import settings
 from django.core.cache import cache
 
+from apps.audit import service as audit
+
 from .events import log_event, mask_email
 
 LOCK_MESSAGE = "Too many failed sign-in attempts. Try again in 15 minutes."
@@ -77,13 +79,26 @@ def register_failure(email, ip):
     shown = mask_email(email)  # the typed text can be a password: never log it as typed
     if _count(_email_key("fails-pair", email, ip), settings.LOGIN_LOCKOUT_ATTEMPTS):
         cache.set(_email_key("lock-pair", email, ip), 1, timeout=seconds)
-        log_event("signin.locked", scope="email+ip", email=shown, ip=ip, minutes=seconds // 60, level=logging.WARNING)
+        _locked("email+ip", shown, ip, seconds)
     if _count(_ip_key("fails-ip", ip), settings.LOGIN_LOCKOUT_IP_ATTEMPTS):
         cache.set(_ip_key("lock-ip", ip), 1, timeout=seconds)
-        log_event("signin.locked", scope="ip", ip=ip, minutes=seconds // 60, level=logging.WARNING)
+        _locked("ip", "", ip, seconds)
     if _count(_email_key("fails-email", email), settings.LOGIN_LOCKOUT_EMAIL_ATTEMPTS):
         cache.set(_email_key("lock-email", email), 1, timeout=seconds)
-        log_event("signin.locked", scope="email", email=shown, minutes=seconds // 60, level=logging.WARNING)
+        _locked("email", shown, "", seconds)
+
+
+def _locked(scope, shown_email, ip, seconds):
+    """A lock has started: one log line and one audit entry. Never the typed text (it can be a password): the email
+    is masked. The audit entry is best effort (a lock must still start if the audit table is not writable)."""
+    log_event("signin.locked", scope=scope, email=shown_email, ip=ip, minutes=seconds // 60, level=logging.WARNING)
+    audit.record(
+        audit.A.SIGNIN_LOCKED,
+        target_type="signin",
+        target_id=shown_email or ip or scope,
+        after={"scope": scope, "email": shown_email, "ip": ip, "minutes": seconds // 60},
+        result=audit.R.DENIED,
+    )
 
 
 def reset(email, ip):
@@ -91,8 +106,17 @@ def reset(email, ip):
     cache.delete(_email_key("fails-pair", email, ip))
 
 
-def clear_email(email, by=""):
-    """Owner action: forget every count and lock for this email, from every address. A lock on an IP address stays."""
+def clear_email(email, by="", actor=None):
+    """Owner action: forget every count and lock for this email, from every address. A lock on an IP address stays.
+    Fail closed: the audit entry comes first, so if it cannot be written the lock is not cleared."""
+    audit.record(
+        audit.A.SIGNIN_UNLOCKED,
+        actor=actor,
+        target_type="signin",
+        target_id=mask_email(email),
+        after={"email": mask_email(email), "by": by},
+        sensitive=True,
+    )
     key = f"signin:gen:{_digest(email)}"
     cache.set(key, int(cache.get(key, 0)) + 1, timeout=None)  # never expires: an old generation must stay dead
     log_event("signin.lock_cleared", email=mask_email(email), by=by)

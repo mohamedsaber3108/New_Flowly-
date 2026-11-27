@@ -39,6 +39,13 @@ class AuditEntry(models.Model):
         EXPORT_REQUESTS = "export.requests_csv", "Requests exported / تصدير الطلبات"
         EXPORT_AUDIT = "export.audit_log", "Audit log exported / تصدير سجل التدقيق"
         SETTINGS = "settings.change", "Setting changed / تغيير إعداد"
+        MFA_ENROL_STARTED = "mfa.enrol_started", "Two-step setup started / بدء إعداد التحقق بخطوتين"
+        MFA_ENROL_CONFIRMED = "mfa.enrol_confirmed", "Two-step turned on / تفعيل التحقق بخطوتين"
+        MFA_RECOVERY_USED = "mfa.recovery_used", "Recovery code used / استخدام رمز استرداد"
+        MFA_RESET = "mfa.reset", "Two-step verification reset / إعادة تعيين التحقق بخطوتين"
+        SIGNIN_LOCKED = "signin.locked", "Sign-in locked / قفل تسجيل الدخول"
+        SIGNIN_UNLOCKED = "signin.unlocked", "Sign-in lock cleared / فك قفل تسجيل الدخول"
+        TOKENS_REVOKED = "tokens.revoked", "Team tokens revoked / إلغاء رموز الفريق"
         DENIED = "access.denied", "Access denied / رفض الوصول"
 
     class Result(models.TextChoices):

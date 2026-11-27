@@ -23,6 +23,8 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.utils import timezone
 
+from apps.audit import service as audit
+
 from .events import log_event
 from .models import MfaDevice, RecoveryCode
 
@@ -150,9 +152,11 @@ def start_enrollment(user):
     if has_confirmed_device(user):
         raise AlreadyEnrolled()
     secret = new_secret()
-    MfaDevice.objects.update_or_create(
-        user=user, defaults={"secret": encrypt_secret(secret), "confirmed_at": None, "last_step": 0}
-    )
+    with transaction.atomic():  # no audit entry, no new device (the secret itself is never written to the audit log)
+        MfaDevice.objects.update_or_create(
+            user=user, defaults={"secret": encrypt_secret(secret), "confirmed_at": None, "last_step": 0}
+        )
+        audit.record(audit.A.MFA_ENROL_STARTED, actor=user, target=user, sensitive=True)
     log_event("mfa.enrol_started", user_id=user.pk, email=user.email)
     return secret, otpauth_uri(user, secret)
 
@@ -172,15 +176,34 @@ def confirm_enrollment(user, code):
         device.save(update_fields=["confirmed_at", "last_step"])
         RecoveryCode.objects.filter(user=user).delete()
         RecoveryCode.objects.bulk_create([RecoveryCode(user=user, digest=_digest(c)) for c in codes])
+        # The number of codes only: never a code, a digest or the secret. Fail closed: no entry, no device switched on.
+        audit.record(
+            audit.A.MFA_ENROL_CONFIRMED,
+            actor=user,
+            target=user,
+            after={"recovery_codes_made": len(codes)},
+            sensitive=True,
+        )
     log_event("mfa.enrol_confirmed", user_id=user.pk, email=user.email)
     return codes
 
 
-def reset_device(user, by="", **context):
+def reset_device(user, by="", actor=None, **context):
     """Owner action (or the break-glass command): remove the device and recovery codes so the user can enrol again.
-    `by` says who did it; `context` adds facts to the log line (the command adds the server user and host)."""
-    MfaDevice.objects.filter(user=user).delete()
-    RecoveryCode.objects.filter(user=user).delete()
+    `by` says who did it; `context` adds facts to the log line and the audit entry (the command adds the server user,
+    the sudo user and the host). `actor` is the owner who clicked (None for the command: no signed-in person).
+    Fail closed: if the audit entry cannot be written, nothing is removed."""
+    with transaction.atomic():
+        MfaDevice.objects.filter(user=user).delete()
+        RecoveryCode.objects.filter(user=user).delete()
+        audit.record(
+            audit.A.MFA_RESET,
+            actor=actor,
+            target=user,
+            after={"by": by, **context},
+            reason="Two-step verification reset",
+            sensitive=True,
+        )
     log_event("mfa.reset", level=logging.WARNING, user_id=user.pk, email=user.email, by=by, **context)
 
 
@@ -201,7 +224,17 @@ def verify_second_factor(user, code):
         return MfaDevice.objects.filter(pk=device.pk, last_step__lt=step).update(last_step=step) == 1
     if not _normalise_recovery(code):
         return False
-    used = RecoveryCode.objects.filter(user=user, digest=_digest(code), used_at__isnull=True).update(
-        used_at=timezone.now()
-    )
+    with transaction.atomic():  # a recovery code is used only if the audit entry is written too
+        used = RecoveryCode.objects.filter(user=user, digest=_digest(code), used_at__isnull=True).update(
+            used_at=timezone.now()
+        )
+        if used == 1:
+            left = RecoveryCode.objects.filter(user=user, used_at__isnull=True).count()
+            audit.record(
+                audit.A.MFA_RECOVERY_USED,
+                actor=user,
+                target=user,
+                after={"recovery_codes_left": left},  # a number: never the code
+                sensitive=True,
+            )
     return used == 1
